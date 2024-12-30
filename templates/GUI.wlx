@@ -1,0 +1,78 @@
+
+utilsAddListeners = Null;
+utilsTransition = Null;
+
+Head        := ImportComponent["Components/Head.wlx"];
+
+Notifications  = ImportComponent["Components/Notifications/Notifications.wlx"];
+
+Alert           = ImportComponent["Components/Alert.wlx"];
+Modals           = ImportComponent["Components/Modals/Modals.wlx"];
+
+ExtensionsJS = (StringJoin["/", FileNameToURLPath[#]]) &/@ WLJS`PM`Includes["js"];
+
+settings = <||>;
+
+App[request_] := Module[{
+
+}, With[{
+    hash = URLDecode @ StringDrop[request["Path"], 
+        Switch[$OperatingSystem,
+            "Windows", 
+            StringLength["/debugger/"], 
+            "Linux",
+            StringLength["debugger"],
+            _,  
+            StringLength["debugger/"] 
+        ]
+    ]
+},
+    With[{
+        notebook = Notebook`HashMap[hash](*`*),
+        secret = CreateUUID[],
+        GlobalMessanger = CreateUUID[]
+    },
+
+        EventHandler[secret, {
+            "Load" -> Function[Null,
+
+            ]
+          }
+        ];
+
+        <html class="h-full"> 
+            <Head Title={"Debugger"} Settings={settings}>
+                <meta charset="utf-8"/>
+                <WLJSHeader List={ExtensionsJS}/>  
+                <WLJSTransportScript TwoKernels={False} Port={$Env["ws"]}/>     
+                <WebUIInitializationScript/>
+            </Head>  
+            <body class="h-full dark:linux:bg-gray-700 dark:owin:bg-gray-700 owin:border owin:border-gray-500 owin:bg-blue-100/20"> 
+            <div>
+              <Alert/>
+
+              <div id="frame">
+                <div class="h-full flex flex-col">          
+                  <Notifications MessagePort={GlobalMessanger}/>
+                  <main class="grow flex flex-col overflow-hidden">
+                    <div class="divide-y divide-gray-200 flex flex-col overflow-hidden h-full bg-transparent dark:divide-gray-600">
+                      <div class="px-4 py-2 text-center text-sm font-semibold dark:text-gray-400 linux:hidden win:h-titlebar owin:h-titlebar" style="-webkit-app-region: drag">
+                        Debugger
+                      </div>
+                    </div>           
+                    <WebUIOnLoad Event={secret} Pattern={"Load"}/>
+                  </main>              
+                </div> 
+              </div>
+            </div>
+            </body>
+        </html>
+    ]
+] ];
+
+
+Wrapper[libUtils_] := (
+    {utilsAddListeners, utilsTransition} = libUtils;
+);
+
+Wrapper

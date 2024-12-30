@@ -1,5 +1,8 @@
 BeginPackage["JerryI`Notebook`Debugger`Utils`", {
-
+    "JerryI`Misc`Events`",
+    "JerryI`Misc`Events`Promise`", 
+    "JerryI`Notebook`", 
+    "JerryI`Notebook`Kernel`"
 }]
 
 Begin["`Internal`"]
