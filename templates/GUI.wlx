@@ -71,8 +71,9 @@ App[request_] := Module[{
 ] ];
 
 
-Wrapper[libUtils_] := (
+Wrapper[libUtils_] := With[{},
     {utilsAddListeners, utilsTransition} = libUtils;
-);
+    App
+];
 
 Wrapper
