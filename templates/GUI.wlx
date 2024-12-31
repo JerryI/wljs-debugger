@@ -3,8 +3,6 @@ utilsTransition = Null;
 
 Head        := ImportComponent["Components/Head.wlx"];
 
-Notifications  = ImportComponent["Components/Notifications/Notifications.wlx"];
-
 Alert           = ImportComponent["Components/Alert.wlx"];
 Modals           = ImportComponent["Components/Modals/Modals.wlx"];
 
@@ -20,27 +18,49 @@ destroy[cli_, events_List, ___] := With[{},
 ]
 
 
-setThingsUp[notebook_, origin_, messanger_, cli_] := Module[{mess = EventClone[messanger]},
+setThingsUp[notebook_, origin_, messanger_, cli_, controls_, logWindow_] := With[{kernel = notebook["Evaluator"]["Kernel"]}, Module[{mess = EventClone[messanger]},
 
     With[{o = EventClone[origin]},
         EventHandler[o, {"Closed"->Function[Null,
             Echo["Origin was closed!"];
-            destroy[cli, {o, mess, secret, cli}];
+            destroy[cli, {o, mess, secret, cli, controls, logWindow}];
         ]}]
     ];
 
     (*/* monitor WSLink */*)
     EventHandler[mess, {        
         "WebSocket:Kernel:Lost" -> Function[Null,
-            destroy[cli, {o, mess, secret, cli}];
+            destroy[cli, {o, mess, secret, cli, controls, logWindow}];
         ]    
     }];
 
     utilsAddListeners[notebook["Evaluator"]["Kernel"]];
 
+    EventHandler[notebook["Evaluator"]["Kernel"]["DebuggerStateChannel"], {
+        "State" -> Function[state,
+            EventFire[logWindow, "State", <|"Client"->cli, "Message"->state|>]
+        ]
+    }];
 
+    EventHandler[controls, {
+        "Abort" -> Function[Null,
+            utilsTransition[kernel -> "Aborted" ];
+        ],
 
-]
+        "Inspect" -> Function[Null,
+            utilsTransition[kernel -> "Inspect" ];
+        ],
+        
+        "Trace" -> Function[Null,
+            utilsTransition[kernel -> "Trace" ];
+        ],
+
+        "Continue" -> Function[Null,
+            utilsTransition[kernel -> "Normal" ];
+        ] 
+    }];
+
+] ]
 
 App[request_] := Module[{
 
@@ -60,12 +80,14 @@ App[request_] := Module[{
         notebook = payload["Notebook"],
         origin = payload["Origin"],
         secret = CreateUUID[],
-        GlobalMessanger = payload["Messanger"]
+        controls = CreateUUID[],
+        GlobalMessanger = payload["Messanger"],
+        logWindow = CreateUUID[]
     },
 
         EventHandler[secret, {
             "Load" -> Function[Null, With[{cli = Global`$Client(*`*)},
-                setThingsUp[notebook, origin, GlobalMessanger, cli];
+                setThingsUp[notebook, origin, GlobalMessanger, cli, controls, logWindow];
             ]]
         }];
 
@@ -86,8 +108,76 @@ App[request_] := Module[{
                       <div class="px-4 py-2 text-center text-sm font-semibold dark:text-gray-400 linux:hidden win:h-titlebar owin:h-titlebar" style="-webkit-app-region: drag">
                         Debugger
                       </div>
+                      <div class="flex flex-col gap-y-2">
+
+                        <div class="flex rounded-md shadow-sm border border-gray-200 dark:border-gray-700 " role="group">
+                          <button id="continue" type="button" class="rounded-md inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 bg-white hover:bg-gray-100 hover:text-blue-700 dark:bg-gray-800 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
+                            <svg class="w-5 h-5 mr-1" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 2H3V14H4V2ZM7.29062 2.59314L6.5 3.00001V13L7.29062 13.4069L14.2906 8.40687V7.59314L7.29062 2.59314ZM13.1398 8.00001L7.5 12.0284V3.9716L13.1398 8.00001Z"/></svg>
+                            Continue
+                          </button>
+
+                          <button id="inspect" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 bg-white  hover:bg-gray-100 hover:text-blue-700 dark:bg-gray-800 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
+
+                              <svg class="w-4 h-4 mr-2 text-teal-500" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path fill="none" stroke="currentColor" stroke-width="2" d="M5.5,21 C7.98528137,21 10,18.9852814 10,16.5 C10,14.0147186 7.98528137,12 5.5,12 C3.01471863,12 1,14.0147186 1,16.5 C1,18.9852814 3.01471863,21 5.5,21 Z M1,16 L1,7 L1,6.5 C1,4.01471863 3.01471863,2 5.5,2 L6,2 M23,16 L23,7 L23,6.5 C23,4.01471863 20.9852814,2 18.5,2 L18,2 M18.5,21 C20.9852814,21 23,18.9852814 23,16.5 C23,14.0147186 20.9852814,12 18.5,12 C16.0147186,12 14,14.0147186 14,16.5 C14,18.9852814 16.0147186,21 18.5,21 Z M10,17 C10,17 10,15 12,15 C14,15 14,17 14,17"/>
+                        </svg>
+
+                            Inspect
+                          </button>  
+
+                          <button id="trace" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 bg-white  hover:bg-gray-100 hover:text-blue-700 dark:bg-gray-800 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
+
+                              <svg class="w-5 h-5 mr-1 text-teal-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 18C16 16.6667 15.7778 15.5 15.5556 15.3333C15.3333 15.1667 13.7778 15 12 15C10.2222 15 8.66667 15.1667 8.44444 15.3333C8.22222 15.5 8 16.6667 8 18M16 18C16 19.3333 15.7778 20.5 15.5556 20.6667C15.3333 20.8333 13.7778 21 12 21C10.2222 21 8.66667 20.8333 8.44444 20.6667C8.22222 20.5 8 19.3333 8 18M16 18C16 18 19.5 17.75 20 17.5C20.5 17.25 21 15.5 21 13.5C21 11.5 20.5 9.75 20 9.5C19.6796 9.33977 18.1268 9.17955 16 9.08514M8 18C8 18 4.5 17.75 4 17.5C3.5 17.25 3 15.5 3 13.5C3 11.5 3.5 9.75 4 9.5C4.32045 9.33977 5.87316 9.17955 8 9.08514M8 9.08514C9.19168 9.03224 10.5636 9 12 9C13.4364 9 14.8083 9.03224 16 9.08514M8 9.08514V7C8 5.22222 8.22222 3.66667 8.44444 3.44444C8.66667 3.22222 10.2222 3 12 3C13.7778 3 15.3333 3.22222 15.5556 3.44444C15.7778 3.66667 16 5.22222 16 7V9.08514" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+
+                            Trace
+                          </button> 
+
+                          <button id="abort" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 bg-white  hover:bg-gray-100 hover:text-blue-700 dark:bg-gray-800 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
+                          <svg class="h-4 w-4 mr-2 text-red-400" viewBox="0 0 48 48" fill="none"><path d="M27 14H42C43.1046 14 44 14.8954 44 16V30C44 31.1046 43.1046 32 42 32H38" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M11 14H6C4.89543 14 4 14.8954 4 16V30C4 31.1046 4.89543 32 6 32H21" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M14 5.99998L34 40" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M32 23H36" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 23H16" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                            Abort
+                            </button> 
+
+                        <div class="ml-auto rounded-md inline-flex items-center px-3 py-1 text-sm text-gray-900 bg-white dark:bg-gray-800 dark:text-white dark:hover:text-white dark:hover:bg-gray-700 dark:focus:ring-blue-500 dark:focus:text-white">
+                          <span class="rounded bg-white text-gray-400" id="state">Undefined</span>
+                        </div>
+                        </div>
+
+                          <div class="overflow-hidden rounded-lg bg-white border border-gray-200 dark:border-gray-700">
+	                        <div class="px-2 py-2 overflow-auto text-sm" id="container">
+	                            
+	                        </div>
+                          </div>
+
+                        </div>                      
                     </div>           
                     <WebUIOnLoad Event={secret} Pattern={"Load"}/>
+                    <WebUIEventListener Id={"continue"} Event={controls} Pattern={"Continue"} />
+                    <WebUIEventListener Id={"inspect"} Event={controls} Pattern={"Inspect"} />
+                    <WebUIEventListener Id={"trace"} Event={controls} Pattern={"Trace"} />
+                    <WebUIEventListener Id={"abort"} Event={controls} Pattern={"Abort"} />
+
+                    <WebUIJSBind Event={logWindow}>
+                    	//will be executed once
+                    	const container = document.getElementById('container');
+                        const state = document.getElementById('state');
+
+                    	//binding to event patterns
+                    	this.on('State', async (data) => {
+                    		const assoc = await interpretate(data, {hold:true});
+                    		const text = await interpretate(assoc.Message, {});
+                    		state.innerText = text;
+                    	});
+
+                        this.on('Message', async (data) => {
+                    		const assoc = await interpretate(data, {hold:true});
+                    		const text = await interpretate(assoc.Message, {});
+                    		const  p = document.createElement('p');
+                            p.innerText = text;
+                            container.appendChild(p);
+                    	});                        
+                    </WebUIJSBind>                    
                   </main>              
                 </div> 
               </div>
