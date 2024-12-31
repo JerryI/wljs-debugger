@@ -54,6 +54,11 @@ With[{
                     Return[];
                 ];
 
+                If[TrueQ[notebook["Evaluator"]["Kernel"]["DebuggerWorking"] ],
+                    EventFire[Messanger, "Warning", "Debugger is already attached to this Kernel"];  
+                    Return[];
+                ];
+
                 WebUILocation[StringJoin["/debugger/", URLEncode[ Compress[<|"Notebook"->notebook, "Origin"->cli, "Messanger"->Messanger|>] ] ], cli, "Target"->_];
             ]
         ] 
