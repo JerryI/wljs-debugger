@@ -12,7 +12,15 @@
       "priority": 99999,
       "category": "Notebook Extensions",
       "figureExportRequired": false,
-      "cellExportRequired": false
+      "cellExportRequired": false,
+      "menu": [
+        {
+          "label": "Debugger",
+          "event": "open_debugger",
+          "section": "kernel",
+          "type": "button"
+        }
+      ]
     },
     "repository": {
       "type": "git",

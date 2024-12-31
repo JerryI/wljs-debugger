@@ -1,4 +1,3 @@
-
 utilsAddListeners = Null;
 utilsTransition = Null;
 
@@ -13,10 +12,40 @@ ExtensionsJS = (StringJoin["/", FileNameToURLPath[#]]) &/@ WLJS`PM`Includes["js"
 
 settings = <||>;
 
+destroy[cli_, events_List, ___] := With[{},
+    Echo["Debugger >> Destructor"];
+    WebUIClose[cli];
+
+    EventRemove /@ events;
+]
+
+
+setThingsUp[notebook_, origin_, messanger_, cli_] := Module[{mess = EventClone[messanger]},
+
+    With[{o = EventClone[origin]},
+        EventHandler[o, {"Closed"->Function[Null,
+            Echo["Origin was closed!"];
+            destroy[cli, {o, mess, secret, cli}];
+        ]}]
+    ];
+
+    (*/* monitor WSLink */*)
+    EventHandler[mess, {        
+        "WebSocket:Kernel:Lost" -> Function[Null,
+            destroy[cli, {o, mess, secret, cli}];
+        ]    
+    }];
+
+    utilsAddListeners[notebook["Evaluator"]["Kernel"]];
+
+
+
+]
+
 App[request_] := Module[{
 
 }, With[{
-    hash = URLDecode @ StringDrop[request["Path"], 
+    payload = Uncompress @ URLDecode @ StringDrop[request["Path"], 
         Switch[$OperatingSystem,
             "Windows", 
             StringLength["/debugger/"], 
@@ -28,17 +57,17 @@ App[request_] := Module[{
     ]
 },
     With[{
-        notebook = Notebook`HashMap[hash](*`*),
+        notebook = payload["Notebook"],
+        origin = payload["Origin"],
         secret = CreateUUID[],
-        GlobalMessanger = CreateUUID[]
+        GlobalMessanger = payload["Messanger"]
     },
 
         EventHandler[secret, {
-            "Load" -> Function[Null,
-
-            ]
-          }
-        ];
+            "Load" -> Function[Null, With[{cli = Global`$Client(*`*)},
+                setThingsUp[notebook, origin, GlobalMessanger, cli];
+            ]]
+        }];
 
         <html class="h-full"> 
             <Head Title={"Debugger"} Settings={settings}>
@@ -50,10 +79,8 @@ App[request_] := Module[{
             <body class="h-full dark:linux:bg-gray-700 dark:owin:bg-gray-700 owin:border owin:border-gray-500 owin:bg-blue-100/20"> 
             <div>
               <Alert/>
-
               <div id="frame">
                 <div class="h-full flex flex-col">          
-                  <Notifications MessagePort={GlobalMessanger}/>
                   <main class="grow flex flex-col overflow-hidden">
                     <div class="divide-y divide-gray-200 flex flex-col overflow-hidden h-full bg-transparent dark:divide-gray-600">
                       <div class="px-4 py-2 text-center text-sm font-semibold dark:text-gray-400 linux:hidden win:h-titlebar owin:h-titlebar" style="-webkit-app-region: drag">
