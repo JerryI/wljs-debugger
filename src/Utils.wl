@@ -33,7 +33,7 @@ transition[ k_ ] := Module[{
     mode = If[MemberQ[k["Properties"], "DebuggingMode"], k["DebuggingMode"], "Normal"],
     promise = Promise[]
 },
-    transition[promise, k];
+    transition[promise, k, mode];
     promise
 ]
 
@@ -88,9 +88,10 @@ streamer[stream_][Nothing, uid_] := With[{sym = store[uid]},
     store[uid] = .;
 ]
 
-transition[promise_, kernel_] := (
-    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
-    EventFire[promise, Resolve, kernel["DebuggingMode"] ];
+transition[promise_, kernel_, mode_] := (
+    kernel["DebuggingMode"] = mode;
+    EventFire[kernel["DebuggerStateChannel"], "State", mode ];
+    EventFire[promise, Resolve, mode ];
 );
 
 transition[promise_, kernel_, "Normal", "Normal"] := EventFire[promise, Resolve, True];
