@@ -28,6 +28,9 @@ destroy[state_, ___] := With[{
 },
     Echo["Debugger >> Destroy"];
 
+    utilsRemoveBreak[kernel, "Assert"];
+    utilsRemoveBreak[kernel, {"Symbol", #}] &/@ (state["Symbols"]);
+            
     utilsReset[kernel];
 
     WebUIClose[cli];
@@ -82,11 +85,21 @@ setThingsUp[state_] := With[{
 
     EventHandler[state["Interruption"], {
         "Assert" -> Function[payload,
+            If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
+                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
+                Return[];
+            ];
+
             utilsTransition[kernel -> "Inspect" ];
             EventFire[logWindow, "Assert", <|"Client"->cli, "Message"->payload|>];
         ],
 
         any_String -> Function[value,
+            If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
+                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
+                Return[];
+            ];
+
             utilsTransition[kernel -> "Inspect" ];
             EventFire[logWindow, "Symbol", <|"Client"->cli, "Message"->value, "Name"->any|>];
         ]
@@ -101,10 +114,9 @@ setThingsUp[state_] := With[{
     utilsTransition[notebook["Evaluator"]["Kernel"]];
 
     EventHandler[controls, {
+
         "Abort" -> Function[Null,
             If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
-                Echo[origin];
-                Echo[messanger];
                 Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
                 Return[];
             ];
@@ -176,6 +188,16 @@ setThingsUp[state_] := With[{
 
         "OnSymbols" -> Function[val,
             state["BreakOnSymbols"] = val;
+        ],
+
+        "AddSymbol" -> Function[symbol,
+            state["Symbols"] = Append[state["Symbols"], symbol];
+            utilsAddBreak[kernel, {"Symbol", symbol, state["Interruption"]}];
+        ],
+        
+        "RemoveSymbol" -> Function[symbol,
+            state["Symbols"] = state["Symbols"] /. {symbol -> Nothing};
+            utilsRemoveBreak[kernel, {"Symbol", symbol}];
         ]
     }];
 
