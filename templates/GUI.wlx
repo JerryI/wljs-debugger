@@ -49,7 +49,7 @@ setThingsUp[state_] := With[{
     
 },
 
-    state["ClonedMessanger"] = messanger;
+    state["ClonedMessanger"] = messanger // EventClone;
     state["ClonedOrigin"] = origin // EventClone;
     state["ClonedClient"] = cli // EventClone;
 
@@ -102,6 +102,13 @@ setThingsUp[state_] := With[{
 
     EventHandler[controls, {
         "Abort" -> Function[Null,
+            If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
+                Echo[origin];
+                Echo[messanger];
+                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
+                Return[];
+            ];
+
             Then[utilsTransition[kernel -> "Aborted" ], Function[Null, 
 
                 Map[Function[cell,
@@ -160,7 +167,7 @@ setThingsUp[state_] := With[{
         ],
 
         "OnAssert" -> Function[val,
-            If[val, 
+            If[val === "true", 
                 utilsAddBreak[kernel, {"Assert", state["Interruption"]}];
             ,
                 utilsRemoveBreak[kernel, "Assert"];
@@ -294,7 +301,7 @@ App[request_] := Module[{
                         const parent = container.parentNode;
                         const state = document.getElementById('state');
 
-                        const break = document.getElementById('break');
+                        const bbreak = document.getElementById('break');
                         const breakDropdown = document.getElementById("break-float");
 
                         const inspect = document.getElementById('inspect');
@@ -309,18 +316,20 @@ App[request_] := Module[{
                         let closeDropdown;
 
                         closeDropdown = (ev) => {
-                            if (!ev.target.contains( breakDropdown )) {
+                            console.log(ev.target);
+                            if (!breakDropdown.contains( ev.target ) && !bbreak.contains( ev.target )) {
                                 window.removeEventListener('click', closeDropdown);
                                 breakDropdown.classList.add('hidden');
                             }
 
-                            ev.stopPropagating();
+                            ev.stopPropagation();
                         };
 
-                        break.addEventListener('click', () => {
-                            const rect = break.getBoundingClientRect();
-                            breakDropdown.style.top = rect.top;
-                            breakDropdown.style.left = rect.left;
+                        bbreak.addEventListener('click', () => {
+                            const rect = bbreak.getBoundingClientRect();
+                            //const p = breakDropdown.getBoundingClientRect();
+                            breakDropdown.style.top = rect.top + 10;
+                            breakDropdown.style.left = `calc(${rect.left + rect.width}px - 20rem)`;
                             breakDropdown.classList.remove('hidden');
                             window.addEventListener('click', closeDropdown);
                         });
@@ -358,10 +367,12 @@ App[request_] := Module[{
                                     abort.style.color = "#8080808f";
                                     inspect.style.color = "#8080808f";
                                     ccontinue.style.color = "#8080808f";
+                                    bbreak.style.color = "#8080808f";
                                     cancel = () => {
                                         abort.style.color = "";
                                         inspect.style.color = "";
-                                        ccontinue.style.color = "";                                     
+                                        ccontinue.style.color = "";  
+                                        bbreak.style.color = "";                                   
                                     }
                                 break;
                             }

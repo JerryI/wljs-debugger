@@ -51,7 +51,7 @@ With[{
                 ]; 
 
                 If[!(notebook["Evaluator"]["Kernel"]["State"] === "Initialized") || !TrueQ[notebook["WebSocketQ"] ],
-                    EventFire[Messanger, "Warning", "Kernel is not ready"];  
+                    EventFire[Messanger, "Warning", "Kernel is not attached / ready"];  
                     Return[];
                 ];
 
@@ -64,6 +64,7 @@ With[{
                     state["Notebook"] = notebook;
                     state["Origin"] = cli;
                     state["Messanger"] = Messanger;
+                    
                     state["Kernel"] = notebook["Evaluator"]["Kernel"];
 
                     With[{k = notebook["Evaluator"]["Kernel"]},

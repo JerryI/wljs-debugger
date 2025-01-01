@@ -10,7 +10,7 @@ Begin["`Internal`"]
 
 addBreak[kernel_, {"Assert", ev_String}] := With[{},
     LinkWrite[kernel["Link"], EnterTextPacket["On[Assert];"] ];
-    LinkWrite[kernel["Link"], EnterTextPacket[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", msg] ]&;"] ] ];
+    LinkWrite[kernel["Link"], EnterTextPacket[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg // Short, StandardForm]]; Pause[2]; ]&;"] ] ];
 ];
 
 removeBreak[kernel_, {"Assert", _}] := removeBreak[kernel, "Assert"];
@@ -20,7 +20,7 @@ removeBreak[kernel_, "Assert"] := With[{},
 ]
 
 addBreak[kernel_, {"Symbol", name_String, ev_String}] := With[{},
-    LinkWrite[kernel["Link"], EnterTextPacket[ StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Short, StandardForm] ] ] ];"] ] ];
+    LinkWrite[kernel["Link"], EnterTextPacket[ StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Short, StandardForm] ]; Pause[2]; ] ];"] ] ];
 ];
 
 removeBreak[kernel_, {"Symbol", name_String, ev_String}] := removeBreak[kernel, {"Symbol", name}];
