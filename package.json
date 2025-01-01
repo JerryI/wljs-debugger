@@ -9,7 +9,7 @@
     "defaultPackage": true,
     "wljs-meta": {
       "frontend": "src/Frontend.wl",
-      "priority": 99999,
+      "priority": 199999,
       "category": "Notebook Extensions",
       "figureExportRequired": false,
       "cellExportRequired": false,

@@ -12,10 +12,13 @@ addListeners[kernel_] := With[{},
         Echo["Clonning events from kernel..."];
 
         kernel["DebuggerStreamer"] = attachStreamer[kernel["StandardOutput"] ];
-        kernel["DebuggerStreamer2"] = attachStreamer[kernel["StandardOutput"] ];
 
         kernel["DebuggerStateChannel"] = CreateUUID[];
     ];
+]
+
+resetListeners[kernel_] := With[{},
+    kernel["DebuggingMode"] = "Normal";
 ]
 
 transition[ Rule[k_, target_] ] := Module[{
@@ -201,6 +204,40 @@ transition[promise_, kernel_, "Normal", "Trace"] := With[{},
     LinkInterrupt[kernel["Link"], 6];
 ];
 
+transition[promise_, kernel_, "Normal", "Show"] := With[{},
+    kernel["DebuggerStreamer"][MenuPacket[1, _] :> With[{},
+        Echo["Debugger >> Menu 1"];   
+        
+        kernel["DebuggerStreamer"][MenuPacket[0, _] :> With[{},
+            Echo["Debugger >> Menu 0"];   
+           
+            kernel["DebuggerStreamer"][TextPacket[_] :> With[{},
+                Echo["Debugger >> First text packet captured!"];
+
+                LinkWrite[kernel["Link"], TextPacket["s"] ];
+
+                With[{uid = CreateUUID[]},
+                    kernel["DebuggerStreamer"][TextPacket[msg_] :> With[{},
+                        EventFire[promise, Resolve, msg];
+                    ] ];
+
+                    kernel["DebuggingMode"] = "Normal";
+                    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+                ];
+            ] ];
+
+        ] ];
+
+        LinkWrite[kernel["Link"], MenuPacket[1] ];
+    ] ];
+
+    kernel["DebuggingMode"] = "In transition";
+    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+
+    Echo["Debugger >> Link Interrupt 6"];
+    LinkInterrupt[kernel["Link"], 6];
+];
+
 transition[promise_, kernel_, "Trace", "Normal"] := With[{},
     kernel["DebuggerStreamer"][MenuPacket[1, _] :> With[{},
         Echo["Debugger >> Menu 1"];   
@@ -238,4 +275,4 @@ transition[promise_, kernel_, "Trace", "Normal"] := With[{},
 End[];
 EndPackage[];
 
-{JerryI`Notebook`Debugger`Utils`Internal`addListeners, JerryI`Notebook`Debugger`Utils`Internal`transition}
+{JerryI`Notebook`Debugger`Utils`Internal`addListeners, JerryI`Notebook`Debugger`Utils`Internal`resetListeners, JerryI`Notebook`Debugger`Utils`Internal`transition}

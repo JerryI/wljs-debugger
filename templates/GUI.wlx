@@ -1,4 +1,5 @@
 utilsAddListeners = Null;
+utilsResetListeners = Null;
 utilsTransition = Null;
 
 Head        := ImportComponent["Components/Head.wlx"];
@@ -13,6 +14,7 @@ settings = <||>;
 destroy[cli_, events_List, kernel_, ___] := With[{},
     Echo["Debugger >> Destructor"];
     kernel["DebuggerWorking"] = False;
+    utilsResetListeners[kernel];
 
     WebUIClose[cli];
 
@@ -50,19 +52,49 @@ setThingsUp[notebook_, origin_, messanger_, cli_, controls_, logWindow_] := With
 
     EventHandler[controls, {
         "Abort" -> Function[Null,
-            Then[utilsTransition[kernel -> "Aborted" ], Function[Null, Null], Function[messsage,
+            Then[utilsTransition[kernel -> "Aborted" ], Function[Null, 
+
+                Map[Function[cell,
+                    cell["State"] = "Idle";
+                    Block[{Global`$Client = origin(*`*)}, EventFire[cell, "State", "Idle"]];
+                ], Select[notebook["Cells"], (#["State"] =!= "Idle") &]];
+
+            ], Function[messsage,
                 Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", messsage] ]
             ]];
         ],
 
         "Inspect" -> Function[Null,
+            If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
+                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
+                Return[];
+            ];
+
             Then[utilsTransition[kernel -> "Inspect" ], Function[Null, Null], Function[messsage,
                 Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", messsage] ]
             ]];
         ],
+
+        "Show" -> Function[Null,
+            If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
+                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
+                Return[];
+            ];
+
+            Then[utilsTransition[kernel -> "Show" ], Function[msg, 
+                EventFire[logWindow, "Message", <|"Client"->cli, "Message"->msg|>]
+            ], Function[messsage,
+                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", messsage] ]
+            ]];
+        ],        
         
         "Trace" -> Function[Null,
-            Then[utilsTransition[kernel -> "Trace" ], Function[stream, 
+            If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
+                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
+                Return[];
+            ];
+
+            Then[utilsTransition[kernel -> "Show" ], Function[stream, 
                 EventHandler[stream, Function[msg,
                     EventFire[logWindow, "Message", <|"Client"->cli, "Message"->msg|>]
                 ]];
@@ -83,12 +115,12 @@ setThingsUp[notebook_, origin_, messanger_, cli_, controls_, logWindow_] := With
 App[request_] := Module[{
 
 }, With[{
-    payload = Uncompress @ URLDecode @ StringDrop[request["Path"], 
+    payload = BinaryDeserialize @ BaseDecode @ URLDecode @ StringDrop[request["Path"], 
         Switch[$OperatingSystem,
             "Windows", 
             StringLength["/debugger/"], 
             "Linux",
-            StringLength["/debugger"],
+            StringLength["/debugger/"],
             _,  
             StringLength["/debugger/"] 
         ]
@@ -117,16 +149,16 @@ App[request_] := Module[{
                 <WebUIInitializationScript/>
             </Head>  
             <body class="h-full dark:linux:bg-gray-700 dark:owin:bg-gray-700 owin:border owin:border-gray-500 owin:bg-blue-100/20"> 
-            <div>
+            <div class="h-full">
               <Alert/>
-              <div id="frame">
-                <div class="h-full flex flex-col">          
-                  <main class="grow flex flex-col overflow-hidden">
-                    <div class="divide-y divide-gray-200 bg-white dark:bg-gray-800 flex flex-col overflow-hidden h-full bg-transparent dark:divide-gray-600">
+              <div id="frame" class="h-full">
+                <div class="h-full flex flex-col h-full">          
+                  <main class="grow flex flex-col overflow-hidden h-full">
+                    <div class="h-full divide-y divide-gray-200 bg-white dark:bg-gray-800 flex flex-col overflow-hidden h-full bg-transparent dark:divide-gray-600">
                       <div class="px-4 py-2 text-center text-sm font-semibold dark:text-gray-400 linux:hidden win:h-titlebar owin:h-titlebar" style="-webkit-app-region: drag">
                         Debugger
                       </div>
-                      <div class="flex flex-col gap-y-2">
+                      <div class="flex flex-col gap-y-2 h-full">
 
                         <div class="flex shadow-sm border border-gray-200 dark:border-gray-700 " role="group">
                           <button id="continue" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
@@ -143,13 +175,13 @@ App[request_] := Module[{
                             Inspect
                           </button>  
 
-                          <button id="trace" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
+                          <button id="show" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
 
                               <svg class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M16 18C16 16.6667 15.7778 15.5 15.5556 15.3333C15.3333 15.1667 13.7778 15 12 15C10.2222 15 8.66667 15.1667 8.44444 15.3333C8.22222 15.5 8 16.6667 8 18M16 18C16 19.3333 15.7778 20.5 15.5556 20.6667C15.3333 20.8333 13.7778 21 12 21C10.2222 21 8.66667 20.8333 8.44444 20.6667C8.22222 20.5 8 19.3333 8 18M16 18C16 18 19.5 17.75 20 17.5C20.5 17.25 21 15.5 21 13.5C21 11.5 20.5 9.75 20 9.5C19.6796 9.33977 18.1268 9.17955 16 9.08514M8 18C8 18 4.5 17.75 4 17.5C3.5 17.25 3 15.5 3 13.5C3 11.5 3.5 9.75 4 9.5C4.32045 9.33977 5.87316 9.17955 8 9.08514M8 9.08514C9.19168 9.03224 10.5636 9 12 9C13.4364 9 14.8083 9.03224 16 9.08514M8 9.08514V7C8 5.22222 8.22222 3.66667 8.44444 3.44444C8.66667 3.22222 10.2222 3 12 3C13.7778 3 15.3333 3.22222 15.5556 3.44444C15.7778 3.66667 16 5.22222 16 7V9.08514" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
 
-                            Trace
+                            Show
                           </button> 
 
                           <button id="abort" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
@@ -162,8 +194,8 @@ App[request_] := Module[{
                         </div>
                         </div>
 
-                          <div class="overflow-hidden bg-white border border-gray-200 dark:border-gray-700">
-	                        <div class="px-2 py-2 overflow-auto text-sm" id="container">
+                          <div class="overflow-hidden hidden bg-white border border-gray-200 dark:border-gray-700 h-full">
+	                        <div class="px-2 py-2 overflow-y-scroll text-sm h-full" id="container">
 	                            
 	                        </div>
                           </div>
@@ -173,16 +205,22 @@ App[request_] := Module[{
                     <WebUIOnLoad Event={secret} Pattern={"Load"}/>
                     <WebUIEventListener Id={"continue"} Event={controls} Pattern={"Continue"} />
                     <WebUIEventListener Id={"inspect"} Event={controls} Pattern={"Inspect"} />
-                    <WebUIEventListener Id={"trace"} Event={controls} Pattern={"Trace"} />
                     <WebUIEventListener Id={"abort"} Event={controls} Pattern={"Abort"} />
 
                     <WebUIJSBind Event={logWindow}>
                     	//will be executed once
                     	const container = document.getElementById('container');
+                        const parent = container.parentNode;
                         const state = document.getElementById('state');
 
                         const inspect = document.getElementById('inspect');
-                        const trace = document.getElementById('trace');
+                        //const show = document.getElementById('show');
+                        const abort = document.getElementById('abort');
+                        const ccontinue = document.getElementById('continue');
+                        let prev;
+                        let cancel;
+
+                        let shown = false;
 
                     	//binding to event patterns
                     	this.on('State', async (data) => {
@@ -195,7 +233,18 @@ App[request_] := Module[{
                             }
                     		state.innerText = text;
 
-                            let prev;
+                            
+
+                            if (prev) {
+                                prev.classList.remove(...('bg-gray-100 dark:bg-gray-700 dark:text-white'.split(' ')));
+                                prev.firstChild.classList.remove('text-teal-500');
+                                prev = false;
+                            } 
+                            
+                            if (cancel) {
+                                cancel();
+                                cancel = false;
+                            }
 
                             switch(text) {
                                 case 'Inspect':
@@ -204,24 +253,34 @@ App[request_] := Module[{
                                     prev = inspect;
                                 break;
 
-                                case 'Trace':
-                                    trace.classList.add(...('bg-gray-100 dark:bg-gray-700 dark:text-white'.split(' ')));
-                                    trace.firstChild.classList.add('text-teal-500');
-                                    prev = trace;
+                                case 'Show':
+                                    //show.classList.add(...('bg-gray-100 dark:bg-gray-700 dark:text-white'.split(' ')));
+                                    //show.firstChild.classList.add('text-teal-500');
+                                    //prev = show;
                                 break;
 
-                                default:
-                                    if (prev) {
-                                        prev.classList.remove(...('bg-gray-100 dark:bg-gray-700 dark:text-white'.split(' ')));
-                                        prev.firstChild.classList.remove('text-teal-500');
+                                case 'In transition':
+                                    abort.style.color = "#8080808f";
+                                    //show.style.color = "#8080808f";
+                                    inspect.style.color = "#8080808f";
+                                    ccontinue.style.color = "#8080808f";
+                                    cancel = () => {
+                                        abort.style.color = "";
+                                        //show.style.color = "";
+                                        inspect.style.color = "";
+                                        ccontinue.style.color = "";                                     
                                     }
+                                break;
                             }
                     	});
 
                         this.on('Message', async (data) => {
                     		const assoc = await interpretate(data, {hold:true});
                     		const text = await interpretate(assoc.Message, {});
-
+                            if (!shown) {
+                                shown = true;
+                                parent.classList.remove('hidden');
+                            }
 
                             if (Array.isArray(text)) {
                                 const buffer = [];
@@ -250,7 +309,7 @@ App[request_] := Module[{
 
 
 Wrapper[libUtils_] := With[{},
-    {utilsAddListeners, utilsTransition} = libUtils;
+    {utilsAddListeners, utilsResetListeners, utilsTransition} = libUtils;
     App
 ];
 

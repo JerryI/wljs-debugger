@@ -11,17 +11,18 @@ BeginPackage["JerryI`Notebook`Debugger`", {
     "JerryI`Notebook`Kernel`",
     "KirillBelov`HTTPHandler`",
     "KirillBelov`HTTPHandler`Extensions`",
-    "KirillBelov`Internal`"
+    "KirillBelov`Internal`",
+    "Notebook`Editor`Snippets`"
 }]
 
 Begin["`Private`"]
 
 root = $InputFileName // DirectoryName // ParentDirectory;
 
-{utilsAddListeners, utilsTransition} = Get[ FileNameJoin[{root, "src", "Utils.wl"}] ];
+{utilsAddListeners, utilsResetListeners, utilsTransition} = Get[ FileNameJoin[{root, "src", "Utils.wl"}] ];
 
 gui  = ImportComponent[FileNameJoin @ {root, "templates", "GUI.wlx"}];
-gui  = gui[{utilsAddListeners, utilsTransition}];
+gui  = gui[{utilsAddListeners, utilsResetListeners, utilsTransition}];
 
 With[{http = AppExtensions`HTTPHandler},
     http["MessageHandler", "Debugger"] = AssocMatchQ[<|"Path" -> ("/debugger/"~~___)|>] -> gui;
@@ -59,7 +60,7 @@ With[{
                     Return[];
                 ];
 
-                WebUILocation[StringJoin["/debugger/", URLEncode[ Compress[<|"Notebook"->notebook, "Origin"->cli, "Messanger"->Messanger|>] ] ], cli, "Target"->_];
+                WebUILocation[StringJoin["/debugger/", URLEncode[ BinarySerialize[<|"Notebook"->notebook, "Origin"->cli, "Messanger"->Messanger|>] // BaseEncode ]  ], cli, "Target"->_];
             ]
         ] 
     }];
@@ -69,6 +70,19 @@ With[{
 
 Options[listener] = {"Path"->"", "Type"->"", "Parameters"->"", "Modals"->"", "AppEvent"->"", "Controls"->"", "Messanger"->""}
 AppExtensions`TemplateInjection["AppTopBar"] = listener;
+
+
+SnippetsCreateItem[
+    "openDebugger", 
+
+    "Template"->ImportComponent[ FileNameJoin @ {root, "templates", "Ico.wlx"} ] , 
+    "Title"->"Debug"
+];
+
+(* just fwd *)
+EventHandler[SnippetsEvents, {
+    "openDebugger" -> Function[assoc, EventFire[assoc["Controls"], "open_debugger", True] ]
+}];
 
 
 End[]
