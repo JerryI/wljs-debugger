@@ -7,18 +7,43 @@ BeginPackage["JerryI`Notebook`Debugger`Utils`", {
 
 Begin["`Internal`"]
 
-addListeners[kernel_] := With[{},
-    If[!MemberQ[k["Properties"], "DebuggerStreamer"],
-        Echo["Clonning events from kernel..."];
 
-        kernel["DebuggerStreamer"] = attachStreamer[kernel["StandardOutput"] ];
+addBreak[kernel_, {"Assert", ev_String}] := With[{},
+    LinkWrite[kernel["Link"], EnterTextPacket["On[Assert];"] ];
+    LinkWrite[kernel["Link"], EnterTextPacket[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", msg] ]&;"] ] ];
+];
 
-        kernel["DebuggerStateChannel"] = CreateUUID[];
-    ];
+removeBreak[kernel_, {"Assert", _}] := removeBreak[kernel, "Assert"];
+removeBreak[kernel_, "Assert"] := With[{},
+    LinkWrite[kernel["Link"], EnterTextPacket["Off[Assert];"] ];
+    LinkWrite[kernel["Link"], EnterTextPacket["$AssertFunction = Automatic;"] ];
 ]
 
-resetListeners[kernel_] := With[{},
-    kernel["DebuggingMode"] = "Normal";
+addBreak[kernel_, {"Symbol", name_String, ev_String}] := With[{},
+    LinkWrite[kernel["Link"], EnterTextPacket[ StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Short, StandardForm] ] ] ];"] ] ];
+];
+
+removeBreak[kernel_, {"Symbol", name_String, ev_String}] := removeBreak[kernel, {"Symbol", name}];
+removeBreak[kernel_, {"Symbol", name_String}] := With[{},
+    LinkWrite[kernel["Link"], EnterTextPacket[StringJoin["Experimental`ValueFunction[\"", name, "\"] // Unset;"] ] ];
+]
+
+addListeners[kernel_] := With[{},
+    If[!MemberQ[k["Properties"], "AsyncStreamer"],
+        Echo["Clonning events from kernel..."];
+
+        kernel["AsyncStreamer"] = attachStreamer[kernel["StandardOutput"] ];
+
+        kernel["AsyncStateChannel"] = CreateUUID[];
+    ];
+
+    <|"AsyncStreamer" -> kernel["AsyncStreamer"], "AsyncStateChannel" -> kernel["AsyncStateChannel"]|>
+]
+
+resetKernel[kernel_] := With[{},
+    If[kernel["State"] === "Initialized",
+        transition[kernel -> "Normal"];
+    ];
 ]
 
 transition[ Rule[k_, target_] ] := Module[{
@@ -90,49 +115,49 @@ streamer[stream_][Nothing, uid_] := With[{sym = store[uid]},
 
 transition[promise_, kernel_, mode_] := (
     kernel["DebuggingMode"] = mode;
-    EventFire[kernel["DebuggerStateChannel"], "State", mode ];
+    EventFire[kernel["AsyncStateChannel"], "State", mode ];
     EventFire[promise, Resolve, mode ];
 );
 
 transition[promise_, kernel_, "Normal", "Normal"] := EventFire[promise, Resolve, True];
 transition[promise_, kernel_, "Normal", "Aborted"] := With[{},
 
-    kernel["DebuggerStreamer"][ReturnTextPacket["$Aborted"] :> With[{},
+    kernel["AsyncStreamer"][ReturnTextPacket["$Aborted"] :> With[{},
         Echo["Debugger >> Got $Aborted"];
         kernel["DebuggingMode"] = "Normal";
-        EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+        EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
         EventFire[promise, Resolve, True];        
     ] ];
 
     kernel["DebuggingMode"] = "In transition";
     Echo["Debugger >> Link Interrupt"];
-    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
     LinkInterrupt[kernel["Link"], 3];
     LinkWrite[kernel["Link"], EnterTextPacket["$Aborted"] ];
 ]
 
 transition[promise_, kernel_, "Normal", "Inspect"] := With[{},
 
-    kernel["DebuggerStreamer"][MenuPacket[1, _] :> With[{},
+    kernel["AsyncStreamer"][MenuPacket[1, _] :> With[{},
         Echo["Debugger >> Menu 1"];   
         
-        kernel["DebuggerStreamer"][MenuPacket[0, _] :> With[{},
+        kernel["AsyncStreamer"][MenuPacket[0, _] :> With[{},
             Echo["Debugger >> Menu 0"];   
            
-            kernel["DebuggerStreamer"][TextPacket[_] :> With[{},
+            kernel["AsyncStreamer"][TextPacket[_] :> With[{},
                 Echo["Debugger >> First text packet captured!"];
 
-                kernel["DebuggerStreamer"][_BeginDialogPacket :> With[{},
+                kernel["AsyncStreamer"][_BeginDialogPacket :> With[{},
                     Echo["Debugger >> Begin dialog!"];
 
-                    kernel["DebuggerStreamer"][_EndDialogPacket :> With[{},
+                    kernel["AsyncStreamer"][_EndDialogPacket :> With[{},
                         kernel["DebuggingMode"] = "Normal";
-                        EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+                        EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
                         Echo["Debugger >> End Dialog (not from transition)"];
                     ] ];
 
                     kernel["DebuggingMode"] = "Inspect";
-                    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+                    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
 
                     EventFire[promise, Resolve, True];
                 ] ];
@@ -146,7 +171,7 @@ transition[promise_, kernel_, "Normal", "Inspect"] := With[{},
     ] ];
 
     kernel["DebuggingMode"] = "In transition";
-    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
 
     Echo["Debugger >> Link Interrupt 6"];
     LinkInterrupt[kernel["Link"], 6];
@@ -154,7 +179,7 @@ transition[promise_, kernel_, "Normal", "Inspect"] := With[{},
 
 transition[promise_, kernel_, "Inspect", "Normal"] := With[{},
     kernel["DebuggingMode"] = "In transition";
-    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
 
     Echo["Debugger >> Return[]"];
 
@@ -169,26 +194,26 @@ transition[promise_, kernel_, c_, t_] := (
 )
 
 transition[promise_, kernel_, "Normal", "Trace"] := With[{},
-    kernel["DebuggerStreamer"][MenuPacket[1, _] :> With[{},
+    kernel["AsyncStreamer"][MenuPacket[1, _] :> With[{},
         Echo["Debugger >> Menu 1"];   
         
-        kernel["DebuggerStreamer"][MenuPacket[0, _] :> With[{},
+        kernel["AsyncStreamer"][MenuPacket[0, _] :> With[{},
             Echo["Debugger >> Menu 0"];   
            
-            kernel["DebuggerStreamer"][TextPacket[_] :> With[{},
+            kernel["AsyncStreamer"][TextPacket[_] :> With[{},
                 Echo["Debugger >> First text packet captured!"];
 
                 LinkWrite[kernel["Link"], TextPacket["t"] ];
 
                 With[{uid = CreateUUID[]},
-                    kernel["DebuggerStreamer"][TextPacket[msg_] :> With[{},
+                    kernel["AsyncStreamer"][TextPacket[msg_] :> With[{},
                         EventFire[uid, msg];
                     ], uid];
 
                     kernel["DebuggingTraceStream"] = uid;
 
                     kernel["DebuggingMode"] = "Trace";
-                    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+                    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
                     EventFire[promise, Resolve, uid];
                 ];
             ] ];
@@ -199,31 +224,31 @@ transition[promise_, kernel_, "Normal", "Trace"] := With[{},
     ] ];
 
     kernel["DebuggingMode"] = "In transition";
-    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
 
     Echo["Debugger >> Link Interrupt 6"];
     LinkInterrupt[kernel["Link"], 6];
 ];
 
 transition[promise_, kernel_, "Normal", "Show"] := With[{},
-    kernel["DebuggerStreamer"][MenuPacket[1, _] :> With[{},
+    kernel["AsyncStreamer"][MenuPacket[1, _] :> With[{},
         Echo["Debugger >> Menu 1"];   
         
-        kernel["DebuggerStreamer"][MenuPacket[0, _] :> With[{},
+        kernel["AsyncStreamer"][MenuPacket[0, _] :> With[{},
             Echo["Debugger >> Menu 0"];   
            
-            kernel["DebuggerStreamer"][TextPacket[_] :> With[{},
+            kernel["AsyncStreamer"][TextPacket[_] :> With[{},
                 Echo["Debugger >> First text packet captured!"];
 
                 LinkWrite[kernel["Link"], TextPacket["s"] ];
 
                 With[{uid = CreateUUID[]},
-                    kernel["DebuggerStreamer"][TextPacket[msg_] :> With[{},
+                    kernel["AsyncStreamer"][TextPacket[msg_] :> With[{},
                         EventFire[promise, Resolve, msg];
                     ] ];
 
                     kernel["DebuggingMode"] = "Normal";
-                    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+                    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
                 ];
             ] ];
 
@@ -233,26 +258,26 @@ transition[promise_, kernel_, "Normal", "Show"] := With[{},
     ] ];
 
     kernel["DebuggingMode"] = "In transition";
-    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
 
     Echo["Debugger >> Link Interrupt 6"];
     LinkInterrupt[kernel["Link"], 6];
 ];
 
 transition[promise_, kernel_, "Trace", "Normal"] := With[{},
-    kernel["DebuggerStreamer"][MenuPacket[1, _] :> With[{},
+    kernel["AsyncStreamer"][MenuPacket[1, _] :> With[{},
         Echo["Debugger >> Menu 1"];   
         
-        kernel["DebuggerStreamer"][MenuPacket[0, _] :> With[{},
+        kernel["AsyncStreamer"][MenuPacket[0, _] :> With[{},
             Echo["Debugger >> Menu 0"];   
            
-            kernel["DebuggerStreamer"][TextPacket[_] :> With[{},
+            kernel["AsyncStreamer"][TextPacket[_] :> With[{},
                 Echo["Debugger >> First text packet captured!"];
 
                 LinkWrite[kernel["Link"], TextPacket["c"] ];
 
                 kernel["DebuggingMode"] = "Normal";
-                EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+                EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
                 EventFire[promise, Resolve, True];
             ] ];
 
@@ -262,12 +287,12 @@ transition[promise_, kernel_, "Trace", "Normal"] := With[{},
     ] ];
 
     With[{traceStream = kernel["DebuggingTraceStream"]},
-        kernel["DebuggerStreamer"][Nothing, traceStream];
+        kernel["AsyncStreamer"][Nothing, traceStream];
         EventRemove[traceStream]
     ];
 
     kernel["DebuggingMode"] = "In transition";
-    EventFire[kernel["DebuggerStateChannel"], "State", kernel["DebuggingMode"] ];
+    EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
 
     Echo["Debugger >> Link Interrupt 6"];
     LinkInterrupt[kernel["Link"], 6];
@@ -276,4 +301,4 @@ transition[promise_, kernel_, "Trace", "Normal"] := With[{},
 End[];
 EndPackage[];
 
-{JerryI`Notebook`Debugger`Utils`Internal`addListeners, JerryI`Notebook`Debugger`Utils`Internal`resetListeners, JerryI`Notebook`Debugger`Utils`Internal`transition}
+{JerryI`Notebook`Debugger`Utils`Internal`addListeners, JerryI`Notebook`Debugger`Utils`Internal`resetKernel, JerryI`Notebook`Debugger`Utils`Internal`transition, JerryI`Notebook`Debugger`Utils`Internal`addBreak, JerryI`Notebook`Debugger`Utils`Internal`removeBreak}

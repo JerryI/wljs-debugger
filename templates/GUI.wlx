@@ -1,6 +1,8 @@
 utilsAddListeners = Null;
-utilsResetListeners = Null;
+utilsReset = Null;
 utilsTransition = Null;
+utilsAddBreak = Null;
+utilsRemoveBreak = Null;
 
 Head        := ImportComponent["Components/Head.wlx"];
 
@@ -11,40 +13,88 @@ ExtensionsJS = (StringJoin["/", FileNameToURLPath[#]]) &/@ WLJS`PM`Includes["js"
 
 settings = <||>;
 
-destroy[cli_, events_List, kernel_, ___] := With[{},
-    Echo["Debugger >> Destructor"];
-    kernel["DebuggerWorking"] = False;
-    utilsResetListeners[kernel];
+destroy[state_, ___] := With[{
+    cli = state["Client"],
+    kernel = state["Kernel"],
+    events = {
+        state["LogWindow"], 
+        state["ClonedMessanger"], 
+        state["ClonedOrigin"], 
+        state["ClonedClient"], 
+        state["AsyncStateChannel"],
+        state["Controls"],
+        state["Assert"]
+    }
+},
+    Echo["Debugger >> Destroy"];
+
+    utilsReset[kernel];
 
     WebUIClose[cli];
 
     EventRemove /@ events;
+    ClearAll[state];
 ]
 
 
-setThingsUp[notebook_, origin_, messanger_, cli_, controls_, logWindow_] := With[{kernel = notebook["Evaluator"]["Kernel"]}, Module[{mess = EventClone[messanger]},
+setThingsUp[state_] := With[{
+    kernel = state["Kernel"],
+    messanger = state["Messanger"],
+    origin = state["Origin"],
+    logWindow = state["LogWindow"],
+    cli = state["Client"],
+    controls = state["Controls"],
+    notebook = state["Notebook"]
+}, Module[{
+    
+},
 
-    With[{o = EventClone[origin]},
-        EventHandler[o, {"Closed"->Function[Null,
-            Echo["Origin was closed!"];
-            destroy[cli, {o, mess, secret, cli, controls, logWindow}, kernel];
-        ]}]
-    ];
+    state["ClonedMessanger"] = messanger;
+    state["ClonedOrigin"] = origin // EventClone;
+    state["ClonedClient"] = cli // EventClone;
+
+    state["Interruption"] = CreateUUID[];
+    state["Symbols"] = {};
+    state["BreakOnSymbols"] = False;
+
+    EventHandler[state["ClonedOrigin"], {"Closed"->Function[Null,
+        Echo["Debugger >> Origin was closed!"];
+        destroy[state];
+    ]}];
+
+    EventHandler[state["ClonedClient"], {"Closed"->Function[Null,
+        Echo["Debugger >> Client window was closed!"];
+        destroy[state];
+    ]}];    
 
     (*/* monitor WSLink */*)
-    EventHandler[mess, {        
+    EventHandler[state["ClonedMessanger"], {        
         "WebSocket:Kernel:Lost" -> Function[Null,
-            destroy[cli, {o, mess, secret, cli, controls, logWindow}, kernel];
+            Echo["Debugger >> WSLink lost"];
+            destroy[state];
         ]    
     }];
 
-    utilsAddListeners[notebook["Evaluator"]["Kernel"]];
+    With[{stream = utilsAddListeners[kernel]},
+        state["AsyncStateChannel"] = stream["AsyncStateChannel"];
+        state["AsyncStreamer"] = stream["AsyncStreamer"];
+    ];
 
-    kernel["DebuggerWorking"] = True;
+    EventHandler[state["Interruption"], {
+        "Assert" -> Function[payload,
+            utilsTransition[kernel -> "Inspect" ];
+            EventFire[logWindow, "Assert", <|"Client"->cli, "Message"->payload|>];
+        ],
 
-    EventHandler[notebook["Evaluator"]["Kernel"]["DebuggerStateChannel"], {
-        "State" -> Function[state,
-            EventFire[logWindow, "State", <|"Client"->cli, "Message"->state|>]
+        any_String -> Function[value,
+            utilsTransition[kernel -> "Inspect" ];
+            EventFire[logWindow, "Symbol", <|"Client"->cli, "Message"->value, "Name"->any|>];
+        ]
+    }];
+
+    EventHandler[state["AsyncStateChannel"], {
+        "State" -> Function[st,
+            EventFire[logWindow, "State", <|"Client"->cli, "Message"->st|>]
         ]
     }];
 
@@ -107,7 +157,19 @@ setThingsUp[notebook_, origin_, messanger_, cli_, controls_, logWindow_] := With
             Then[utilsTransition[kernel -> "Normal" ], Function[Null, Null], Function[messsage,
                 Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", messsage] ]
             ]];
-        ] 
+        ],
+
+        "OnAssert" -> Function[val,
+            If[val, 
+                utilsAddBreak[kernel, {"Assert", state["Interruption"]}];
+            ,
+                utilsRemoveBreak[kernel, "Assert"];
+            ];
+        ],
+
+        "OnSymbols" -> Function[val,
+            state["BreakOnSymbols"] = val;
+        ]
     }];
 
 ] ]
@@ -115,7 +177,7 @@ setThingsUp[notebook_, origin_, messanger_, cli_, controls_, logWindow_] := With
 App[request_] := Module[{
 
 }, With[{
-    payload = BinaryDeserialize @ BaseDecode @ URLDecode @ StringDrop[request["Path"], 
+    state = BinaryDeserialize @ BaseDecode @ URLDecode @ StringDrop[request["Path"], 
         Switch[$OperatingSystem,
             "Windows", 
             StringLength["/debugger/"], 
@@ -127,17 +189,24 @@ App[request_] := Module[{
     ]
 },
     With[{
-        notebook = payload["Notebook"],
-        origin = payload["Origin"],
+        notebook = state["Notebook"],
+        origin = state["Origin"],
         secret = CreateUUID[],
         controls = CreateUUID[],
-        GlobalMessanger = payload["Messanger"],
+        GlobalMessanger = state["Messanger"],
         logWindow = CreateUUID[]
     },
 
         EventHandler[secret, {
             "Load" -> Function[Null, With[{cli = Global`$Client(*`*)},
-                setThingsUp[notebook, origin, GlobalMessanger, cli, controls, logWindow];
+
+                state["ValidQ"] = True;
+                state["Client"] = cli;
+                state["Controls"] = controls;
+                state["Secret"] = secret;
+                state["LogWindow"] = logWindow;
+
+                setThingsUp[state];
             ]]
         }];
 
@@ -180,7 +249,15 @@ App[request_] := Module[{
                             Abort
                             </button> 
 
-                        <div class="ml-auto inline-flex items-center px-3 py-1 text-sm text-gray-900 dark:text-white dark:hover:text-white dark:hover:bg-gray-700 dark:focus:ring-blue-500 dark:focus:text-white">
+                            <button id="break" type="button" class="ml-auto inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
+                          
+                            <span>Break</span>
+                            <svg class="-mr-1 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+                                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                            </svg>
+                            </button>
+
+                        <div class="inline-flex items-center px-3 py-1 text-sm text-gray-900 dark:text-white dark:hover:text-white dark:hover:bg-gray-700 dark:focus:ring-blue-500 dark:focus:text-white">
                           <span class="rounded bg-white text-gray-400" id="state">Undefined</span>
                         </div>
                         </div>
@@ -192,26 +269,61 @@ App[request_] := Module[{
                           </div>
 
                         </div>                      
-                    </div>           
+                    </div>   
+
+                    <div id="break-float" 
+                         class="absolute right-0 z-inf mt-6 origin-top-right divide-y divide-gray-100 rounded backdrop-blur-xl bg-white/90 outline outline-gray-300 outline-offset-0 outline-1 text-gray-800 hidden" 
+                         style="width:20rem" 
+                         role="menu" 
+                         tabindex="-1">
+                        <div class="px-2 py-2">                          
+                        <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-assert" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Assert</label><p class="text-gray-500">Listen to any Assert[False] calls</p></div></div> 
+                        <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-symbol" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Symbols</label><p class="text-gray-500">Break on any symbols assigments</p></div></div> 
+                        </div>
+                    </div>
+
                     <WebUIOnLoad Event={secret} Pattern={"Load"}/>
                     <WebUIEventListener Id={"continue"} Event={controls} Pattern={"Continue"} />
                     <WebUIEventListener Id={"inspect"} Event={controls} Pattern={"Inspect"} />
                     <WebUIEventListener Id={"abort"} Event={controls} Pattern={"Abort"} />
+                    <WebUIEventListener Id={"break-assert"} Type={"change"} Property={"checked"} Event={controls} Pattern={"OnAssert"} />
+                    <WebUIEventListener Id={"break-symbol"} Type={"change"} Property={"checked"} Event={controls} Pattern={"OnSymbols"} />
 
                     <WebUIJSBind Event={logWindow}>
-                    	//will be executed once
                     	const container = document.getElementById('container');
                         const parent = container.parentNode;
                         const state = document.getElementById('state');
 
+                        const break = document.getElementById('break');
+                        const breakDropdown = document.getElementById("break-float");
+
                         const inspect = document.getElementById('inspect');
-                        //const show = document.getElementById('show');
                         const abort = document.getElementById('abort');
                         const ccontinue = document.getElementById('continue');
+
                         let prev;
                         let cancel;
 
                         let shown = false;
+
+                        let closeDropdown;
+
+                        closeDropdown = (ev) => {
+                            if (!ev.target.contains( breakDropdown )) {
+                                window.removeEventListener('click', closeDropdown);
+                                breakDropdown.classList.add('hidden');
+                            }
+
+                            ev.stopPropagating();
+                        };
+
+                        break.addEventListener('click', () => {
+                            const rect = break.getBoundingClientRect();
+                            breakDropdown.style.top = rect.top;
+                            breakDropdown.style.left = rect.left;
+                            breakDropdown.classList.remove('hidden');
+                            window.addEventListener('click', closeDropdown);
+                        });
 
                     	//binding to event patterns
                     	this.on('State', async (data) => {
@@ -223,8 +335,6 @@ App[request_] := Module[{
                                 state.classList.remove('font-medium', 'text-teal-500')
                             }
                     		state.innerText = text;
-
-                            
 
                             if (prev) {
                                 prev.classList.remove(...('bg-gray-100 dark:bg-gray-700 dark:text-white'.split(' ')));
@@ -244,20 +354,12 @@ App[request_] := Module[{
                                     prev = inspect;
                                 break;
 
-                                case 'Show':
-                                    //show.classList.add(...('bg-gray-100 dark:bg-gray-700 dark:text-white'.split(' ')));
-                                    //show.firstChild.classList.add('text-teal-500');
-                                    //prev = show;
-                                break;
-
                                 case 'In transition':
                                     abort.style.color = "#8080808f";
-                                    //show.style.color = "#8080808f";
                                     inspect.style.color = "#8080808f";
                                     ccontinue.style.color = "#8080808f";
                                     cancel = () => {
                                         abort.style.color = "";
-                                        //show.style.color = "";
                                         inspect.style.color = "";
                                         ccontinue.style.color = "";                                     
                                     }
@@ -287,7 +389,37 @@ App[request_] := Module[{
                                 container.appendChild(p);
                             }
                             
-                    	});                        
+                    	});
+                        
+                        this.on('Assert', async (data) => {
+                    		const assoc = await interpretate(data, {hold:true});
+                    		const text = await interpretate(assoc.Message, {});
+                            if (!shown) {
+                                shown = true;
+                                parent.classList.remove('hidden');
+                            }
+                             
+                            const  p = document.createElement('p');
+                            p.innerText = text;
+                            container.appendChild(p);
+                        });
+
+                        this.on('Symbol', async (data) => {
+                    		const assoc = await interpretate(data, {hold:true});
+                    		const text = await interpretate(assoc.Message, {});
+                            const name = await interpretate(assoc.Name, {});
+                            if (!shown) {
+                                shown = true;
+                                parent.classList.remove('hidden');
+                            }
+                             
+                            const  p = document.createElement('p');
+                            const bold = document.createElement('b');
+                            bold.innerText = name + ' ';
+                            const plain = document.createTextNode(text);
+                            p.appendChild(bold, plain);
+                            container.appendChild(p);
+                        });                        
                     </WebUIJSBind>                    
                   </main>              
                 </div> 
@@ -300,7 +432,7 @@ App[request_] := Module[{
 
 
 Wrapper[libUtils_] := With[{},
-    {utilsAddListeners, utilsResetListeners, utilsTransition} = libUtils;
+    {utilsAddListeners, utilsReset, utilsTransition, utilsAddBreak, utilsRemoveBreak} = libUtils;
     App
 ];
 

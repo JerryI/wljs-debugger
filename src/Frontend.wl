@@ -19,10 +19,10 @@ Begin["`Private`"]
 
 root = $InputFileName // DirectoryName // ParentDirectory;
 
-{utilsAddListeners, utilsResetListeners, utilsTransition} = Get[ FileNameJoin[{root, "src", "Utils.wl"}] ];
+utils = Get[ FileNameJoin[{root, "src", "Utils.wl"}] ];
 
 gui  = ImportComponent[FileNameJoin @ {root, "templates", "GUI.wlx"}];
-gui  = gui[{utilsAddListeners, utilsResetListeners, utilsTransition}];
+gui  = gui[utils];
 
 With[{http = AppExtensions`HTTPHandler},
     http["MessageHandler", "Debugger"] = AssocMatchQ[<|"Path" -> ("/debugger/"~~___)|>] -> gui;
@@ -55,12 +55,23 @@ With[{
                     Return[];
                 ];
 
-                If[TrueQ[notebook["Evaluator"]["Kernel"]["DebuggerWorking"] ],
+                If[TrueQ[notebook["Evaluator"]["Kernel"]["DebuggerSymbol"]["ValidQ"] ],
                     EventFire[Messanger, "Warning", "Debugger is already attached to this Kernel"];  
                     Return[];
                 ];
 
-                WebUILocation[StringJoin["/debugger/", URLEncode[ BinarySerialize[<|"Notebook"->notebook, "Origin"->cli, "Messanger"->Messanger|>] // BaseEncode ]  ], cli, "Target"->_];
+                With[{state = Unique["debuggerState"]},
+                    state["Notebook"] = notebook;
+                    state["Origin"] = cli;
+                    state["Messanger"] = Messanger;
+                    state["Kernel"] = notebook["Evaluator"]["Kernel"];
+
+                    With[{k = notebook["Evaluator"]["Kernel"]},
+                        k["DebuggerSymbol"] = state;
+                    ];
+
+                    WebUILocation[StringJoin["/debugger/", URLEncode[ BinarySerialize[state] // BaseEncode ]  ], cli, "Target"->_];
+                ];
             ]
         ] 
     }];
