@@ -238,7 +238,9 @@ App[request_] := Module[{
                 setThingsUp[state];
             ]]
         }];
-
+    {
+         "<!DOCTYPE html>"
+    ,
         <html class="h-full"> 
             <Head Title={"Debugger"} Settings={settings}>
                 <meta charset="utf-8"/>
@@ -252,7 +254,7 @@ App[request_] := Module[{
               <div id="frame" class="h-full">
                 <div class="h-full flex flex-col h-full">          
                   <main class="grow flex flex-col overflow-hidden h-full">
-                    <div class="h-full divide-y divide-gray-200 bg-white dark:bg-gray-800 flex flex-col overflow-hidden h-full bg-transparent dark:divide-gray-600">
+                  <div class="h-full divide-y divide-gray-200 bg-white dark:bg-gray-800 flex flex-col overflow-hidden h-full bg-transparent dark:divide-gray-600">
                       <div class="px-4 py-2 text-center text-sm font-semibold dark:text-gray-400 linux:hidden win:h-titlebar owin:h-titlebar" style="-webkit-app-region: drag">
                         Debugger
                       </div>
@@ -290,19 +292,21 @@ App[request_] := Module[{
                           <span class="rounded bg-white text-gray-400" id="state">Undefined</span>
                         </div>
                         </div>
+                     </div>
+                     </div>
 
                        
+                     <div class="overflow-hidden hidden bg-white border border-gray-200 dark:border-gray-700 h-full">
+	                        <div class="px-2 py-2 overflow-y-scroll text-sm h-full" id="container">
+	                            
+	                        </div>
+                    </div>
 
                         <div class="bg-white border border-gray-200 dark:border-gray-700 px-2 py-2 text-sm h-full" id="symbols">
                           <div class="sm-controls">
                             <label class="block text-sm font-medium leading-6 text-gray-900">Track symbol</label>
                             <div class="mt-1 flex flex-row gap-x-1 items-center">
-                              <input 
-                                value="" 
-                                placeholder="" 
-                                type="text" 
-                                class="relative border-gray-300 cursor-default min-w-0 h-6 pl-3 pr-2 text-left text-gray-500 bg-gray-10" 
-                              />
+                              <input type="text" class="relative border-gray-300 cursor-default min-w-0 h-6 pl-3 pr-2 text-left text-gray-500 bg-gray-10"/>
                               <div class="flex">
                                 <button class="inline-flex items-center rounded-sm border border-gray-300 px-1 py-0.5 h-6 font-sans text-xs text-gray-400">+</button>
                               </div>
@@ -339,7 +343,7 @@ App[request_] := Module[{
                                       <div class="text-gray-900">Front-end Developer</div>
                                     </td>
                                     <td class="px-3 text-sm whitespace-nowrap text-gray-500">
-                                      <span class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-red-600/20 bg-gray-50 ring-gray-300 text-gray-700 ring-inset">Tracking</span>
+                                      <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 bg-gray-50 text-gray-700 ring-inset">Tracking</span>
                                     </td>
                                     <td class="relative pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
                                       <a href="#" class="text-gray-400 hover:text-indigo-900">✕</a>
@@ -349,10 +353,9 @@ App[request_] := Module[{
                               </table>
                             </div>
                           </div>
-                        </div>
-
-                        </div>                      
-                    </div>   
+          
+                     
+ 
 
                     <div id="break-float" 
                          class="absolute right-0 z-inf mt-6 origin-top-right divide-y divide-gray-100 rounded backdrop-blur-xl bg-white/90 outline outline-gray-300 outline-offset-0 outline-1 text-gray-800 hidden" 
@@ -364,6 +367,7 @@ App[request_] := Module[{
                         <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-symbol" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Symbols</label><p class="text-gray-500">Break on any symbols assigments</p></div></div> 
                         </div>
                     </div>
+</div>
 
                     <WebUIOnLoad Event={secret} Pattern={"Load"}/>
                     <WebUIEventListener Id={"continue"} Event={controls} Pattern={"Continue"} />
@@ -406,7 +410,7 @@ App[request_] := Module[{
                         bbreak.addEventListener('click', () => {
                             const rect = bbreak.getBoundingClientRect();
                             //const p = breakDropdown.getBoundingClientRect();
-                            breakDropdown.style.top = rect.top + 10;
+                            breakDropdown.style.top = `calc(${rect.left}px + 2rem)`;
                             breakDropdown.style.left = `calc(${rect.left + rect.width}px - 20rem)`;
                             breakDropdown.classList.remove('hidden');
                             window.addEventListener('click', closeDropdown);
@@ -516,6 +520,7 @@ App[request_] := Module[{
             </div>
             </body>
         </html>
+    } // StringRiffle
     ]
 ] ];
 
