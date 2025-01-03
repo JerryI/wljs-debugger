@@ -28,7 +28,7 @@ generateEntry[Name_String, UId_, LocalControls_] := With[{
             </div>
           </div>
         </td>
-        <td class="px-3 text-sm whitespace-nowrap text-gray-500">
+        <td class="px-3 text-sm whitespace-nowrap text-gray-500" style="max-width: 10rem">
           <div id="{UId}-ownvalue" class="text-gray-900"></div>
         </td>
         <td class="px-3 text-sm whitespace-nowrap text-gray-500">
@@ -37,15 +37,21 @@ generateEntry[Name_String, UId_, LocalControls_] := With[{
         <td class="relative pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
           <input id="{UId}-break" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/>
         </td>
-        <script type="module">
+
             <WebUIJSBind Event={UId}>
                 const state = document.getElementById('<UId/>-state');
                 const breakCheckbox = document.getElementById('<UId/>-break');
                 const ownvalue = document.getElementById('<UId/>-ownvalue');
 
-                const global = {};
+                const env = {element: ownvalue};
+                const global = {stack:[]};
                 const local = {};
-                core.EditorView([['JSObject', '???'], ['Rule', "'ReadOnly'", true]], {global: global, local: local, element: ownvalue});
+                
+                env.local = local;
+                env.global = global;
+                env.local.env = {...env};
+
+                core.EditorView([['JSObject', '???'], ['Rule', "'ReadOnly'", true]], env);
 
                 breakCheckbox.addEventListener('change', () => {
                     server.emitt('<LocalControls/>', '"'+breakCheckbox.checked+'"');
@@ -78,14 +84,16 @@ generateEntry[Name_String, UId_, LocalControls_] := With[{
 
                     if (!synced) {
                         state.innerText = "Synced";
-                        state.style = '--tw-ring-color:rgb(166, 255, 200); background:rgb(238, 255, 236); color:rgb(115, 255, 108);';
+                        state.style = '--tw-ring-color: rgb(135 209 163); background: rgb(238, 255, 236); color: rgb(86 197 81);';
                         synced = true;
                     }
 
-                    throw {global, local, text};
+                    
+                    local.editor.dispatch({
+                        changes: {from: 0, to: local.editor.state.doc.length, insert: text}
+                    });
                 });
             </WebUIJSBind>
-        </script>
     </tr>
     ]
 ]
@@ -125,8 +133,7 @@ setThingsUp[state_] := With[{
     logWindow = state["LogWindow"],
     cli = state["Client"],
     controls = state["Controls"],
-    notebook = state["Notebook"],
-    symbolsContainer = CreateUUID[]
+    notebook = state["Notebook"]
 }, Module[{
     
 },
@@ -136,7 +143,6 @@ setThingsUp[state_] := With[{
     state["ClonedClient"] = cli // EventClone;
 
     state["Interruption"] = CreateUUID[];
-    state["SymbolsContainer"] = symbolsContainer;
     state["Symbols"] = <||>;
     state["BreakOnSymbols"] = True;
 
@@ -146,11 +152,17 @@ setThingsUp[state_] := With[{
         utilsAddBreak[kernel, {"Symbol", name, state["Interruption"]}, "Logger"->(state["Info", #]&)];
 
         EventHandler[localControl, Function[val,
+            If[val === "true",
+                utilsAddBreak[kernel, {"Symbol", name, state["Interruption"]}, "Logger"->(state["Info", #]&), "Pause"->4];
+            ,
+                utilsAddBreak[kernel, {"Symbol", name, state["Interruption"]}, "Logger"->(state["Info", #]&)];
+            ];
+
             state["Symbols"] = Join[state["Symbols"], <|name -> Join[state["Symbols"][name], <|"Break"->(val === "true")|>]|>]; 
         ]];
 
-        With[{entry = generateEntry[name, state["Symbols"][name]["Event"], localControl]},
-            EventFire[state["SymbolsContainer"], "Append", <|"Client"->cli, "Data"->entry|>];
+        With[{entry = URLEncode @ generateEntry[name, state["Symbols"][name]["Event"], localControl]},
+            EventFire[logWindow, "Append", <|"Client"->cli, "Data"->entry|>];
         ]
     ];
 
@@ -369,7 +381,7 @@ App[request_] := Module[{
                       <div class="px-4 py-2 text-center text-sm font-semibold dark:text-gray-400 linux:hidden win:h-titlebar owin:h-titlebar" style="-webkit-app-region: drag">
                         Debugger
                       </div>
-                      <div class="flex flex-col gap-y-2 h-full">
+                      <div class="flex flex-col gap-y-2">
 
                         <div class="flex shadow-sm border border-gray-200 dark:border-gray-700 " role="group">
                           <button id="continue" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
@@ -404,9 +416,7 @@ App[request_] := Module[{
                         </div>
                         </div>
                      </div>
-                     </div>
 
-                       
                      <div class="overflow-hidden hidden bg-white border border-gray-200 dark:border-gray-700 h-full">
 	                        <div class="px-2 py-2 overflow-y-scroll text-sm h-full" id="container" style="color:#acacac">
 	                            
@@ -429,7 +439,7 @@ App[request_] := Module[{
                           </div>
 
           
-                          <WebUIContainer Event={symbolsContainer} Class={"overflow-x-auto"}>
+                          
                             <div class="inline-block w-full py-2 align-middle">
                               <table class="w-full divide-y divide-gray-300">
                                 <thead>
@@ -440,15 +450,19 @@ App[request_] := Module[{
                                     <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">Break on</th>
                                   </tr>
                                 </thead>
-                                <tbody class="divide-y divide-gray-200 bg-white">
-                                  <WebUIContainerChild/>
+                                <tbody id="tbody-container" class="divide-y divide-gray-200 bg-white">
+                                  
                                 </tbody>
                               </table>
                             </div>
-                         </WebUIContainer>
+                         
           
                      
 </div>
+                     </div>
+
+                       
+
 
 <div id="break-float" 
                          class="absolute right-0 z-inf mt-6 origin-top-right divide-y divide-gray-100 rounded backdrop-blur-xl bg-white/90 outline outline-gray-300 outline-offset-0 outline-1 text-gray-800 hidden" 
@@ -487,6 +501,8 @@ App[request_] := Module[{
                         const inspect = document.getElementById('inspect');
                         const abort = document.getElementById('abort');
                         const ccontinue = document.getElementById('continue');
+
+                        const tbody = document.getElementById('tbody-container');
 
                         let prev;
                         let cancel;
@@ -604,6 +620,32 @@ App[request_] := Module[{
                                 el.innerText = text;
                             });
                         });
+
+                        this.on('Append', async (data) => {
+                            const assoc = await interpretate(data, {hold:true});
+                    		const d = decodeURIComponent(await interpretate(assoc.Data, {}));
+                            
+                            
+                            tbody.insertAdjacentHTML("afterbegin", d);
+                            
+                            
+                            const scriptList = tbody.firstChild;
+                       
+                            if (scriptList.nodeType === 1) Array.from(scriptList.querySelectorAll("script")).forEach( oldScriptEl => {
+                              const newScriptEl = document.createElement("script");
+                              
+                              Array.from(oldScriptEl.attributes).forEach( attr => {
+                                newScriptEl.setAttribute(attr.name, attr.value) 
+                              });
+                              
+                              const scriptText = document.createTextNode(oldScriptEl.innerHTML);
+                              newScriptEl.appendChild(scriptText);
+                              
+                              oldScriptEl.parentNode.replaceChild(newScriptEl, oldScriptEl);
+                            });
+
+                            
+                        })
                         
                         this.on('Assert', async (data) => {
                     		const assoc = await interpretate(data, {hold:true});

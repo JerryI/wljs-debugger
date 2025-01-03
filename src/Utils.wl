@@ -10,12 +10,12 @@ Begin["`Internal`"]
 
 addBreak[kernel_, {"Assert", ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
     Kernel`Async[kernel, ToExpression["On[Assert];"] ];
-    Kernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg // Short, StandardForm]]; Pause[4]; ]&;"] ] ];
+    Kernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg // Shallow, StandardForm]]; Pause[4]; ]&;"] ] ];
     echo["Assertions were enabled"];
 ];
 
 updateSymbols[kernel_, list_] := With[{},
-    With[{query = StringRiffle[(StringTemplate["``=``;"][#,#]) &/@ list, " "]},
+    With[{query = StringRiffle[(StringTemplate["If[!SymbolQ[``], ``=``];"][#,#,#]) &/@ list, " "]},
         Kernel`Async[kernel, ToExpression[query] ];
     ];
 ]
@@ -28,7 +28,7 @@ removeBreak[kernel_, "Assert", OptionsPattern[] ] := With[{echo = OptionValue["L
 ]
 
 addBreak[kernel_, {"Symbol", name_String, ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"], pause = OptionValue["Pause"]},
-    Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Short, StandardForm] ]; Pause[", ToString[pause, InputForm], "]; ];"] ] ];
+    Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Shallow, StandardForm] ]; Pause[", ToString[pause, InputForm], "]; ];"] ] ];
     echo[StringTemplate["Symbol `` was added to tracking"][name] ];
 ];
 
