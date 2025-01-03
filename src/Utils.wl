@@ -9,26 +9,32 @@ Begin["`Internal`"]
 
 
 addBreak[kernel_, {"Assert", ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
-    LinkWrite[kernel["Link"], EnterTextPacket["On[Assert];"] ];
-    LinkWrite[kernel["Link"], EnterTextPacket[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg // Short, StandardForm]]; Pause[2]; ]&;"] ] ];
+    Kernel`Async[kernel, ToExpression["On[Assert];"] ];
+    Kernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg // Short, StandardForm]]; Pause[4]; ]&;"] ] ];
     echo["Assertions were enabled"];
 ];
 
+updateSymbols[kernel_, list_] := With[{},
+    With[{query = StringRiffle[(StringTemplate["``=``;"][#,#]) &/@ list, " "]},
+        Kernel`Async[kernel, ToExpression[query] ];
+    ];
+]
+
 removeBreak[kernel_, {"Assert", _} opts: OptionsPattern[] ] := removeBreak[kernel, "Assert", opts];
 removeBreak[kernel_, "Assert", OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
-    LinkWrite[kernel["Link"], EnterTextPacket["Off[Assert];"] ];
-    LinkWrite[kernel["Link"], EnterTextPacket["$AssertFunction = Automatic;"] ];
+    Kernel`Async[kernel, ToExpression["Off[Assert];"] ];
+    Kernel`Async[kernel, ToExpression["$AssertFunction = Automatic;"] ];
     echo["Assertions were disabled"];
 ]
 
-addBreak[kernel_, {"Symbol", name_String, ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
-    LinkWrite[kernel["Link"], EnterTextPacket[ StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Short, StandardForm] ]; Pause[2]; ] ];"] ] ];
+addBreak[kernel_, {"Symbol", name_String, ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"], pause = OptionValue["Pause"]},
+    Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Short, StandardForm] ]; Pause[", ToString[pause, InputForm], "]; ];"] ] ];
     echo[StringTemplate["Symbol `` was added to tracking"][name] ];
 ];
 
 removeBreak[kernel_, {"Symbol", name_String, ev_String}, opts: OptionsPattern[]] := removeBreak[kernel, {"Symbol", name}, opts];
 removeBreak[kernel_, {"Symbol", name_String}, OptionsPattern[] ] := With[{},
-    LinkWrite[kernel["Link"], EnterTextPacket[StringJoin["Experimental`ValueFunction[\"", name, "\"] // Unset;"] ] ];
+    Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[\"", name, "\"] // Unset;"] ] ];
     echo[StringTemplate["Symbol `` was removed from tracking"][name] ];
 ]
 
@@ -193,15 +199,14 @@ transition[promise_, kernel_, "Inspect", "Normal", opts: OptionsPattern[] ] := W
 ];
 
 transition[promise_, kernel_, c_, t_, opts: OptionsPattern[] ] := (
-    OptionValue["Logger"][StringTemplate["Transition from `` to `` is not possible"][c,t] ];
     EventFire[promise, Reject, StringTemplate["Transition from `` to `` is not possible"][c,t] ];
 )
 
 Options[transition] = {"Logger"->Echo}
-Options[addBreak] = {"Logger"->Echo}
+Options[addBreak] = {"Logger"->Echo, "Pause"->0.1}
 Options[removeBreak] = {"Logger"->Echo}
 
 End[];
 EndPackage[];
 
-{JerryI`Notebook`Debugger`Utils`Internal`addListeners, JerryI`Notebook`Debugger`Utils`Internal`resetKernel, JerryI`Notebook`Debugger`Utils`Internal`transition, JerryI`Notebook`Debugger`Utils`Internal`addBreak, JerryI`Notebook`Debugger`Utils`Internal`removeBreak}
+{JerryI`Notebook`Debugger`Utils`Internal`addListeners, JerryI`Notebook`Debugger`Utils`Internal`resetKernel, JerryI`Notebook`Debugger`Utils`Internal`transition, JerryI`Notebook`Debugger`Utils`Internal`addBreak, JerryI`Notebook`Debugger`Utils`Internal`removeBreak,  JerryI`Notebook`Debugger`Utils`Internal`updateSymbols}

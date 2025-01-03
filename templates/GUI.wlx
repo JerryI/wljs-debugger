@@ -4,6 +4,8 @@ utilsTransition = Null;
 utilsAddBreak = Null;
 utilsRemoveBreak = Null;
 
+utilsUpdateSymbols = Null;
+
 Head        := ImportComponent["Components/Head.wlx"];
 
 Alert           = ImportComponent["Components/Alert.wlx"];
@@ -12,6 +14,81 @@ Modals           = ImportComponent["Components/Modals/Modals.wlx"];
 ExtensionsJS = (StringJoin["/", FileNameToURLPath[#]]) &/@ WLJS`PM`Includes["js"];
 
 settings = <||>;
+
+generateEntry[Name_String, UId_, LocalControls_] := With[{
+
+},
+
+    With[{},
+    <tr>
+        <td class="pr-3 pl-4 py-2 text-sm whitespace-nowrap">
+          <div class="flex items-center">
+            <div class="ml-2">
+              <div class="font-medium text-gray-900"><Name/></div>
+            </div>
+          </div>
+        </td>
+        <td class="px-3 text-sm whitespace-nowrap text-gray-500">
+          <div id="{UId}-ownvalue" class="text-gray-900"></div>
+        </td>
+        <td class="px-3 text-sm whitespace-nowrap text-gray-500">
+          <span id="{UId}-state" class="inline-flex items-center rounded-md px-2 py-1 text-xs ring-1 bg-gray-50 ring-gray-300 text-gray-500 ring-inset">Out of sync</span>
+        </td>
+        <td class="relative pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
+          <input id="{UId}-break" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/>
+        </td>
+        <script type="module">
+            <WebUIJSBind Event={UId}>
+                const state = document.getElementById('<UId/>-state');
+                const breakCheckbox = document.getElementById('<UId/>-break');
+                const ownvalue = document.getElementById('<UId/>-ownvalue');
+
+                const global = {};
+                const local = {};
+                core.EditorView([['JSObject', '???'], ['Rule', "'ReadOnly'", true]], {global: global, local: local, element: ownvalue});
+
+                breakCheckbox.addEventListener('change', () => {
+                    server.emitt('<LocalControls/>', '"'+breakCheckbox.checked+'"');
+                });
+
+                let synced = false;
+
+                this.on('State', async (data) => {
+                    const assoc = await interpretate(data, {hold:true});
+                    const text = await interpretate(assoc.State, {});
+                    switch(text) {
+                        case 'Reset':
+                            state.innerText = "Out of sync";
+                            state.style = '';
+                            synced = false;
+                        break;
+
+                        case 'Break':
+                            state.innerText = "Break";
+                            state.style = '--tw-ring-color: #ffa6a6; background: #ffecec; color: #ff6c6c;';
+                        break;
+                    }
+                });
+
+                
+
+                this.on('Update', async (data) => {
+                    const assoc = await interpretate(data, {hold:true});
+                    const text = decodeURIComponent(await interpretate(assoc.Data, {}));
+
+                    if (!synced) {
+                        state.innerText = "Synced";
+                        state.style = '--tw-ring-color:rgb(166, 255, 200); background:rgb(238, 255, 236); color:rgb(115, 255, 108);';
+                        synced = true;
+                    }
+
+                    throw {global, local, text};
+                });
+            </WebUIJSBind>
+        </script>
+    </tr>
+    ]
+]
 
 destroy[state_, ___] := With[{
     cli = state["Client"],
@@ -23,13 +100,14 @@ destroy[state_, ___] := With[{
         state["ClonedClient"], 
         state["AsyncStateChannel"],
         state["Controls"],
-        state["Assert"]
+        state["Assert"],
+        state["SymbolsContainer"]
     }
 },
     Echo["Debugger >> Destroy"];
 
     utilsRemoveBreak[kernel, "Assert"];
-    utilsRemoveBreak[kernel, {"Symbol", #}] &/@ (state["Symbols"]);
+    utilsRemoveBreak[kernel, {"Symbol", #}] &/@ (Keys @ state["Symbols"]);
             
     utilsReset[kernel];
 
@@ -47,7 +125,8 @@ setThingsUp[state_] := With[{
     logWindow = state["LogWindow"],
     cli = state["Client"],
     controls = state["Controls"],
-    notebook = state["Notebook"]
+    notebook = state["Notebook"],
+    symbolsContainer = CreateUUID[]
 }, Module[{
     
 },
@@ -57,8 +136,23 @@ setThingsUp[state_] := With[{
     state["ClonedClient"] = cli // EventClone;
 
     state["Interruption"] = CreateUUID[];
-    state["Symbols"] = {};
-    state["BreakOnSymbols"] = False;
+    state["SymbolsContainer"] = symbolsContainer;
+    state["Symbols"] = <||>;
+    state["BreakOnSymbols"] = True;
+
+    state["AppendSymbol", name_] := With[{localControl = CreateUUID[]},
+
+        state["Symbols"] = Join[state["Symbols"], <|name -> <|"Event"->CreateUUID[], "Break"->False, "Broken"->False|>|>];
+        utilsAddBreak[kernel, {"Symbol", name, state["Interruption"]}, "Logger"->(state["Info", #]&)];
+
+        EventHandler[localControl, Function[val,
+            state["Symbols"] = Join[state["Symbols"], <|name -> Join[state["Symbols"][name], <|"Break"->(val === "true")|>]|>]; 
+        ]];
+
+        With[{entry = generateEntry[name, state["Symbols"][name]["Event"], localControl]},
+            EventFire[state["SymbolsContainer"], "Append", <|"Client"->cli, "Data"->entry|>];
+        ]
+    ];
 
     EventHandler[state["ClonedOrigin"], {"Closed"->Function[Null,
         Echo["Debugger >> Origin was closed!"];
@@ -86,7 +180,7 @@ setThingsUp[state_] := With[{
     EventHandler[state["Interruption"], {
         "Assert" -> Function[payload,
             If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
-                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
+                state["Warning", "No running cells found"];
                 Return[];
             ];
 
@@ -95,15 +189,30 @@ setThingsUp[state_] := With[{
         ],
 
         any_String -> Function[value,
-            If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
-                Block[{Global`$Client = origin(*`*)}, EventFire[messanger, "Warning", "No running cells found"] ];
-                Return[];
-            ];
+            EventFire[state["Symbols"][any]["Event"], "Update", <|"Client"->cli, "Data"->URLEncode[value]|>];
+            
+            If[TrueQ[state["Symbols"][any]["Break"]] && state["BreakOnSymbols"], 
+                If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
+                    state["Warning", "No running cells found"];
+                    Return[];
+                ];
 
-            utilsTransition[kernel -> "Inspect", "Logger"->(state["Info", #]&) ];
-            EventFire[logWindow, "Symbol", <|"Client"->cli, "Message"->value, "Name"->any|>];
+                state["Info", String["`` assigment cauth"][any]];
+                EventFire[state["Symbols"][any]["Event"], "State", <|"Client"->cli, "State"->"Break"|>];
+
+                state["Symbols"] = Join[state["Symbols"], <|any -> Join[state["Symbols"][any], <|"Broken"->True|>]|>];
+
+                utilsTransition[kernel -> "Inspect", "Logger"->(state["Info", #]&) ];
+            ];
         ]
     }];
+
+    state["resetSymbols"] := With[{
+        syms = Select[Keys @ state["Symbols"], Function[item, TrueQ[item["Broken"]]]]
+    },
+        EventFire[state["Symbols"][#]["Event"], "State", <|"Client"->cli, "State"->"Reset"|>] &/@ syms;
+        (state["Symbols"] = Join[state["Symbols"], <|# -> Join[state["Symbols"][#], <|"Broken"->False|>]|>]) &/@ syms;
+    ];
 
     EventHandler[state["AsyncStateChannel"], {
         "State" -> Function[st,
@@ -125,6 +234,8 @@ setThingsUp[state_] := With[{
     EventHandler[controls, {
 
         "Abort" -> Function[Null,
+            state["resetSymbols"];
+
             If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
                 state["Warning", "No running cells found"];
                 Return[];
@@ -143,6 +254,8 @@ setThingsUp[state_] := With[{
         ],
 
         "Inspect" -> Function[Null,
+            state["resetSymbols"];
+
             If[Length[Select[notebook["Cells"], (#["State"] =!= "Idle") &]] == 0,
                 state["Warning", "No running cells found"];
                 Return[];
@@ -154,6 +267,8 @@ setThingsUp[state_] := With[{
         ],
 
         "Continue" -> Function[Null,
+            state["resetSymbols"];
+
             Then[utilsTransition[kernel -> "Normal", "Logger"->(state["Info", #]&) ], Function[Null, Null], Function[messsage,
                 state["Warning", messsage];
             ]];
@@ -172,7 +287,7 @@ setThingsUp[state_] := With[{
         ],
 
         "OnSymbols" -> Function[val,
-            state["BreakOnSymbols"] = val;
+            state["BreakOnSymbols"] = (val === "true");
         ],
 
         "AddSymbol" -> Function[Null,
@@ -181,18 +296,19 @@ setThingsUp[state_] := With[{
                 Return[];
             ];
 
-            If[MemberQ[state["Symbols"], state["Typing"]], 
+            If[MemberQ[Keys @ state["Symbols"], state["Typing"]], 
                 state["Warning", "Symbol is already in the list"];
                 Return[];
             ];
 
-            state["Symbols"] = Append[state["Symbols"], state["Typing"]];
-            utilsAddBreak[kernel, {"Symbol", state["Typing"], state["Interruption"]}, "Logger"->(state["Info", #]&)];
+            EventFire[logWindow, "CleanField", <|"Client"->cli|>];
+
+            state["AppendSymbol", state["Typing"]];
         ],
-        
-        "RemoveSymbol" -> Function[symbol,
-            state["Symbols"] = state["Symbols"] /. {symbol -> Nothing};
-            utilsRemoveBreak[kernel, {"Symbol", symbol}, "Logger"->(state["Info", #]&)];
+
+        "Refresh" -> Function[Null,
+            state["Info", "Refresh watched symbols"];
+            utilsUpdateSymbols[kernel, Keys @ state["Symbols"]];
         ]
     }];
 
@@ -292,14 +408,14 @@ App[request_] := Module[{
 
                        
                      <div class="overflow-hidden hidden bg-white border border-gray-200 dark:border-gray-700 h-full">
-	                        <div class="px-2 py-2 overflow-y-scroll text-sm h-full" id="container">
+	                        <div class="px-2 py-2 overflow-y-scroll text-sm h-full" id="container" style="color:#acacac">
 	                            
 	                        </div>
                     </div>
 
                         <div class="bg-white border border-gray-200 dark:border-gray-700 px-2 py-2 text-sm h-full" id="symbols">
                           <div class="sm-controls">
-                            <label class="block text-sm font-medium leading-6 text-gray-900">Track symbol</label>
+                            <label class="block text-sm font-medium leading-6 text-gray-900">Watch symbols</label>
                             <div class="mt-1 flex flex-row gap-x-1 items-center">
                               <input id="input_symbol" type="text" class="relative border-gray-300 cursor-default min-w-0 h-6 pl-3 pr-2 text-left text-gray-500 bg-gray-10"/>
                               <div class="flex">
@@ -312,42 +428,24 @@ App[request_] := Module[{
                             <p class="mt-1 text-sm text-gray-500"></p>
                           </div>
 
-                          <div class="overflow-x-auto">
-                            <div class="inline-block min-w-full py-2 align-middle">
-                              <table class="min-w-full divide-y divide-gray-300">
+          
+                          <WebUIContainer Event={symbolsContainer} Class={"overflow-x-auto"}>
+                            <div class="inline-block w-full py-2 align-middle">
+                              <table class="w-full divide-y divide-gray-300">
                                 <thead>
                                   <tr>
-                                    <th scope="col" class="py-3.5 pr-3 pl-4 text-left text-sm text-gray-700 sm:pl-0">Name</th>
-                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">Value</th>
+                                    <th scope="col" class="py-3.5 pr-3 pl-4 text-left text-sm text-gray-700">Name</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">OwnValue</th>
                                     <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">Status</th>
-                                    <th scope="col" class="relative py-3.5 pr-4 pl-3 sm:pr-0">
-                                      <span class="sr-only">Remove</span>
-                                    </th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">Break on</th>
                                   </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200 bg-white">
-                                  <tr>
-                                    <td class="pr-3 pl-4 py-2 text-sm whitespace-nowrap">
-                                      <div class="flex items-center">
-                                        <div class="ml-2">
-                                          <div class="font-medium text-gray-900">Lindsay Walton</div>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td class="px-3 text-sm whitespace-nowrap text-gray-500">
-                                      <div class="text-gray-900">Front-end Developer</div>
-                                    </td>
-                                    <td class="px-3 text-sm whitespace-nowrap text-gray-500">
-                                      <span class="inline-flex items-center rounded-md px-2 py-1 text-xs ring-1 bg-gray-50 ring-gray-300 text-gray-500 ring-inset">Tracking</span>
-                                    </td>
-                                    <td class="relative pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
-                                      <a href="#" class="text-gray-400 hover:text-indigo-900">✕</a>
-                                    </td>
-                                  </tr>
+                                  <WebUIContainerChild/>
                                 </tbody>
                               </table>
                             </div>
-                          </div>
+                         </WebUIContainer>
           
                      
 </div>
@@ -359,7 +457,7 @@ App[request_] := Module[{
                          tabindex="-1">
                         <div class="px-2 py-2">                          
                             <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-assert" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Assert</label><p class="text-gray-500">Listen to any Assert[False] calls</p></div></div> 
-                            <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-symbol" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Symbols</label><p class="text-gray-500">Break on any symbols assigments</p></div></div> 
+                            <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-symbol" checked="true" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Symbols</label><p class="text-gray-500">Break on any symbols assigments</p></div></div> 
                         </div>
                     </div>
 
@@ -377,6 +475,8 @@ App[request_] := Module[{
                     <WebUIJSBind Event={logWindow}>
                     	const container = document.getElementById('container');
                         const symbols = document.getElementById('symbols');
+
+                        const inputField = document.getElementById("input_symbol");
 
                         const parent = container.parentNode;
                         const state = document.getElementById('state');
@@ -423,9 +523,12 @@ App[request_] := Module[{
                             const  p = document.createElement('p');
                             await cbk(p);
                             container.appendChild(p);
+                            p.scrollIntoView();
                         }
 
                     	//binding to event patterns
+                        this.on('CleanField', () => {inputField.value = ''});
+
                     	this.on('State', async (data) => {
                     		const assoc = await interpretate(data, {hold:true});
                     		const text = await interpretate(assoc.Message, {});
@@ -489,6 +592,7 @@ App[request_] := Module[{
 
                             addEntry(async (el) => {
                                 el.innerText = text;
+                                el.classList.add('text-red-400');
                             });
                         });
 
@@ -504,15 +608,11 @@ App[request_] := Module[{
                         this.on('Assert', async (data) => {
                     		const assoc = await interpretate(data, {hold:true});
                     		let text = await interpretate(assoc.Message, {});
-                            text = decodeURIComponent(text);
+                            text = decodeURIComponent(text).slice(14,-2);
                              
                             addEntry(async (el) => {
-                                const container = {
-                                    element: el,
-                                    uid: uuidv4()
-                                };
-
-                                new window.SupportedCells['codemirror'].view(container, text);
+                                //manually craft
+                                core.EditorView([['JSObject', text], ['Rule', "'ReadOnly'", true]], {global: {}, local: {}, element: el});
                             });
                         });
 
@@ -529,7 +629,7 @@ App[request_] := Module[{
 
 
 Wrapper[libUtils_] := With[{},
-    {utilsAddListeners, utilsReset, utilsTransition, utilsAddBreak, utilsRemoveBreak} = libUtils;
+    {utilsAddListeners, utilsReset, utilsTransition, utilsAddBreak, utilsRemoveBreak, utilsUpdateSymbols} = libUtils;
     App
 ];
 
