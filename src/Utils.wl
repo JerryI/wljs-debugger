@@ -10,7 +10,7 @@ Begin["`Internal`"]
 
 addBreak[kernel_, {"Assert", ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
     Kernel`Async[kernel, ToExpression["On[Assert];"] ];
-    Kernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg // Shallow, StandardForm]]; Pause[4]; ]&;"] ] ];
+    Kernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg, InputForm]]; Pause[4]; ]&;"] ] ];
     echo["Assertions were enabled"];
 ];
 
