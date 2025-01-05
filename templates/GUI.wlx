@@ -185,7 +185,9 @@ setThingsUp[state_] := With[{
         "WebSocket:Kernel:Lost" -> Function[Null,
             Echo["Debugger >> WSLink lost"];
             destroy[state];
-        ]    
+        ],
+        
+        rest_ :> (state["Info", StringTemplate["(system log) `` >> ``"][rest, #]]&)
     }];
 
     With[{stream = utilsAddListeners[kernel]},
@@ -213,7 +215,7 @@ setThingsUp[state_] := With[{
                     Return[];
                 ];
 
-                state["Info", String["`` assigment cauth"][any]];
+                state["Info", StringTemplate["`` assigment captured"][any]];
                 EventFire[state["Symbols"][any]["Event"], "State", <|"Client"->cli, "State"->"Break"|>];
 
                 state["Symbols"] = Join[state["Symbols"], <|any -> Join[state["Symbols"][any], <|"Broken"->True|>]|>];
