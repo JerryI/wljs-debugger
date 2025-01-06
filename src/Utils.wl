@@ -11,7 +11,7 @@ Begin["`Internal`"]
 addBreak[kernel_, {"Assert", ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
     Kernel`Async[kernel, ToExpression["On[Assert];"] ];
     Kernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg, InputForm]]; Pause[4]; ]&;"] ] ];
-    echo["Assertions were enabled"];
+    echo["Assertions hook was enabled"];
 ];
 
 updateSymbols[kernel_, list_] := With[{},
@@ -24,18 +24,18 @@ removeBreak[kernel_, {"Assert", _} opts: OptionsPattern[] ] := removeBreak[kerne
 removeBreak[kernel_, "Assert", OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
     Kernel`Async[kernel, ToExpression["Off[Assert];"] ];
     Kernel`Async[kernel, ToExpression["$AssertFunction = Automatic;"] ];
-    echo["Assertions were disabled"];
+    echo["Assertions hook was disabled"];
 ]
 
 addBreak[kernel_, {"Symbol", name_String, ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"], pause = OptionValue["Pause"]},
     Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Shallow, StandardForm] ]; Pause[", ToString[pause, InputForm], "]; ];"] ] ];
-    echo[StringTemplate["Symbol `` was added to tracking"][name] ];
+    echo[StringTemplate["A hook for symbol `` was added"][name] ];
 ];
 
 removeBreak[kernel_, {"Symbol", name_String, ev_String}, opts: OptionsPattern[]] := removeBreak[kernel, {"Symbol", name}, opts];
 removeBreak[kernel_, {"Symbol", name_String}, OptionsPattern[] ] := With[{},
     Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[\"", name, "\"] // Unset;"] ] ];
-    echo[StringTemplate["Symbol `` was removed from tracking"][name] ];
+    echo[StringTemplate["A hook for symbol `` was removed"][name] ];
 ]
 
 addListeners[kernel_] := With[{},
@@ -98,7 +98,7 @@ streamer[stream_][r_RuleDelayed] := With[{pattern = r[[1]], handler = Unique[]},
         If[MatchQ[data, pattern],
             data /. r;
             streamer[stream]["Handlers"] = streamer[stream]["Handlers"] /. {handler -> Nothing};
-            Echo["Streamer >> Match!"];
+            Echo["streamer >> Match"];
         ];
     ];
 ]
@@ -133,7 +133,7 @@ transition[promise_, kernel_, "Normal", "Normal", opts: OptionsPattern[] ] := Ev
 transition[promise_, kernel_, "Normal", "Aborted", opts: OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
 
     kernel["AsyncStreamer"][ReturnTextPacket["$Aborted"] :> With[{},
-        echo["Debugger >> Got $Aborted"];
+        echo["Debugger >> Got $Aborted packet"];
         kernel["DebuggingMode"] = "Normal";
         EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
         EventFire[promise, Resolve, True];        
@@ -155,15 +155,15 @@ transition[promise_, kernel_, "Normal", "Inspect", opts: OptionsPattern[] ] := W
             echo["Debugger >> Menu 0"];   
            
             kernel["AsyncStreamer"][TextPacket[_] :> With[{},
-                echo["Debugger >> First text packet captured!"];
+                echo["Debugger >> Transition menu"];
 
                 kernel["AsyncStreamer"][_BeginDialogPacket :> With[{},
-                    echo["Debugger >> Begin dialog!"];
+                    echo["Debugger >> Begin inspection"];
 
                     kernel["AsyncStreamer"][_EndDialogPacket :> With[{},
                         kernel["DebuggingMode"] = "Normal";
                         EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
-                        echo["Debugger >> End Dialog"];
+                        echo["Debugger >> End inspection"];
                     ] ];
 
                     kernel["DebuggingMode"] = "Inspect";
@@ -172,6 +172,7 @@ transition[promise_, kernel_, "Normal", "Inspect", opts: OptionsPattern[] ] := W
                     EventFire[promise, Resolve, True];
                 ] ];
 
+                echo["Debugger >> Choose (i)"];
                 LinkWrite[kernel["Link"], TextPacket["i"] ];
             ] ];
 
@@ -191,7 +192,7 @@ transition[promise_, kernel_, "Inspect", "Normal", opts: OptionsPattern[] ] := W
     kernel["DebuggingMode"] = "In transition";
     EventFire[kernel["AsyncStateChannel"], "State", kernel["DebuggingMode"] ];
 
-    echo["Debugger >> Return[]"];
+    echo["Debugger >> Return to the normal mode"];
 
     LinkWrite[kernel["Link"], EnterTextPacket["Return[]"] ];
 
