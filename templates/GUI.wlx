@@ -28,7 +28,7 @@ generateEntry[Name_String, UId_, LocalControls_] := With[{
         <td class="pr-3 pl-4 py-2 text-sm whitespace-nowrap">
           <div class="flex items-center">
             <div class="ml-2">
-              <div class="font-medium text-gray-900"><Name/></div>
+              <div class="font-medium text-gray-900 dark:text-gray-300"><Name/></div>
             </div>
           </div>
         </td>
