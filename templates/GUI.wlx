@@ -33,10 +33,10 @@ generateEntry[Name_String, UId_, LocalControls_] := With[{
           </div>
         </td>
         <td class="px-3 text-sm whitespace-nowrap text-gray-500" style="max-width: 10rem">
-          <div id="{UId}-ownvalue" class="text-gray-900"></div>
+          <div id="{UId}-ownvalue" class="text-gray-900 dark:invert dark:hue-rotate-180"></div>
         </td>
         <td class="px-3 text-sm whitespace-nowrap text-gray-500">
-          <span id="{UId}-state" class="inline-flex items-center rounded-md px-2 py-1 text-xs ring-1 bg-gray-50 ring-gray-300 text-gray-500 ring-inset">Out of sync</span>
+          <span id="{UId}-state" class="inline-flex items-center rounded-md px-2 py-1 text-xs ring-1 bg-gray-50 ring-gray-300 text-gray-500 dark:invert dark:hue-rotate-180 ring-inset">Out of sync</span>
         </td>
         <td class="relative pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
           <input id="{UId}-break" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/>
@@ -390,7 +390,7 @@ App[request_] := Module[{
                       </div>
                       <div class="flex flex-col gap-y-2">
 
-                        <div class="flex shadow-sm border border-gray-200 dark:border-gray-700 " role="group">
+                        <div class="flex shadow-sm" role="group">
                           <button id="continue" type="button" class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-900 hover:bg-gray-100 hover:text-blue-700 dark:text-white dark:hover:text-white dark:hover:bg-gray-700">
                             <svg class="w-5 h-5 mr-1" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 2H3V14H4V2ZM7.29062 2.59314L6.5 3.00001V13L7.29062 13.4069L14.2906 8.40687V7.59314L7.29062 2.59314ZM13.1398 8.00001L7.5 12.0284V3.9716L13.1398 8.00001Z"/></svg>
                             Continue
@@ -419,22 +419,22 @@ App[request_] := Module[{
                             </button>
 
                         <div class="inline-flex items-center px-3 py-1 text-sm text-gray-900 dark:text-white dark:hover:text-white dark:hover:bg-gray-700 dark:focus:ring-blue-500 dark:focus:text-white">
-                          <span class="rounded bg-white text-gray-400" id="state">Undefined</span>
+                          <span class="rounded text-gray-400" id="state">Undefined</span>
                         </div>
                         </div>
                      </div>
 
-                     <div class="overflow-hidden hidden bg-white border border-gray-200 dark:border-gray-700 h-full">
+                     <div class="overflow-hidden hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 h-full">
 	                        <div class="px-2 py-2 overflow-y-scroll text-sm h-full" id="container" style="color:#acacac">
 	                            
 	                        </div>
                     </div>
 
-                        <div class="bg-white border border-gray-200 dark:border-gray-700 px-2 py-2 text-sm h-full" id="symbols">
+                        <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2 py-2 text-sm h-full" id="symbols">
                           <div class="sm-controls">
-                            <label class="block text-sm font-medium leading-6 text-gray-900">Watch symbols</label>
+                            <label class="block text-sm font-medium dark:text-gray-300 leading-6 text-gray-900">Watch symbols</label>
                             <div class="mt-1 flex flex-row gap-x-1 items-center">
-                              <input id="input_symbol" type="text" class="relative border-gray-300 cursor-default min-w-0 h-6 pl-3 pr-2 text-left text-gray-500 bg-gray-10"/>
+                              <input id="input_symbol" type="text" class="relative border-gray-300 cursor-default min-w-0 h-6 pl-3 pr-2 text-left text-gray-500 bg-gray-10 dark:bg-gray-700 dark:text-gray-300"/>
                               <div class="flex">
                                 <button id="add_symbol" class="inline-flex items-center rounded-sm border border-gray-300 px-1 py-0.5 h-6 font-sans text-xs text-gray-400">+</button>
                               </div>
@@ -451,13 +451,13 @@ App[request_] := Module[{
                               <table class="w-full divide-y divide-gray-300">
                                 <thead>
                                   <tr>
-                                    <th scope="col" class="py-3.5 pr-3 pl-4 text-left text-sm text-gray-700">Name</th>
-                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">OwnValue</th>
-                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">Status</th>
-                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700">Break on</th>
+                                    <th scope="col" class="py-3.5 pr-3 pl-4 text-left text-sm text-gray-700 dark:text-gray-300">Name</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700 dark:text-gray-300">OwnValue</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700 dark:text-gray-300">Status</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm text-gray-700 dark:text-gray-300">Break on</th>
                                   </tr>
                                 </thead>
-                                <tbody id="tbody-container" class="divide-y divide-gray-200 bg-white">
+                                <tbody id="tbody-container" class="divide-y divide-gray-200">
                                   
                                 </tbody>
                               </table>
@@ -472,13 +472,13 @@ App[request_] := Module[{
 
 
 <div id="break-float" 
-                         class="absolute right-0 z-inf mt-6 origin-top-right divide-y divide-gray-100 rounded backdrop-blur-xl bg-white/90 outline outline-gray-300 outline-offset-0 outline-1 text-gray-800 hidden" 
+                         class="absolute right-0 z-inf mt-6 origin-top-right divide-y divide-gray-100 rounded backdrop-blur-xl bg-white/90 dark:bg-gray-700 outline outline-gray-300 outline-offset-0 outline-1 text-gray-800 hidden" 
                          style="width:20rem" 
                          role="menu" 
                          tabindex="-1">
                         <div class="px-2 py-2">                          
-                            <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-assert" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Assert</label><p class="text-gray-500">Listen to any Assert[False] calls</p></div></div> 
-                            <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-symbol" checked="true" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900">Symbols</label><p class="text-gray-500">Break on any symbols assigments</p></div></div> 
+                            <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-assert" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900 dark:text-gray-300">Assert</label><p class="text-gray-500 dark:text-gray-300">Listen to any Assert[False] calls</p></div></div> 
+                            <div class="relative flex items-start sm-controls"><div class="flex h-6 items-center"><input id="break-symbol" checked="true" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"/></div><div class="ml-3 text-sm leading-6"><label class="font-medium text-gray-900 dark:text-gray-300">Symbols</label><p class="text-gray-500 dark:text-gray-300">Break on any symbols assigments</p></div></div> 
                         </div>
                     </div>
 
