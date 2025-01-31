@@ -1,21 +1,25 @@
-BeginPackage["JerryI`Notebook`Debugger`", {
+BeginPackage["CoffeeLiqueur`Extensions`Debugger`", {
     "JerryI`Misc`Events`",
     "JerryI`Misc`Events`Promise`", 
-    "JerryI`Notebook`", 
     "JerryI`WLX`",
     "JerryI`WLX`Importer`",
     "JerryI`WLX`WebUI`",
     "JerryI`WLX`WLJS`",
     "JerryI`Misc`WLJS`Transport`",
-    "JerryI`Notebook`AppExtensions`",
-    "JerryI`Notebook`Kernel`",
     "KirillBelov`HTTPHandler`",
     "KirillBelov`HTTPHandler`Extensions`",
     "KirillBelov`Internal`",
-    "Notebook`Editor`Snippets`"
+    "CoffeeLiqueur`Extensions`CommandPalette`"
 }]
 
+
 Begin["`Private`"]
+
+Needs["CoffeeLiqueur`Notebook`Cells`" -> "cell`"];
+Needs["CoffeeLiqueur`Notebook`" -> "nb`"];
+Needs["CoffeeLiqueur`Notebook`Kernel`" -> "GenericKernel`"];
+Needs["CoffeeLiqueur`Notebook`AppExtensions`" -> "AppExtensions`"];
+
 
 root = $InputFileName // DirectoryName // ParentDirectory;
 
@@ -28,7 +32,7 @@ With[{http = AppExtensions`HTTPHandler},
     http["MessageHandler", "Debugger"] = AssocMatchQ[<|"Path" -> ("/debugger/"~~___)|>] -> gui;
 ];
 
-getNotebook[controls_] := EventFire[controls, "NotebookQ", True] /. {{___, n_Notebook, ___} :> n};
+getNotebook[controls_] := EventFire[controls, "NotebookQ", True] /. {{___, n_nb`NotebookObj, ___} :> n};
 
 
 listener[OptionsPattern[] ] := 
@@ -45,7 +49,7 @@ With[{
                 notebook = getNotebook[Controls],
                 cli = Global`$Client
             },
-                If[!MatchQ[notebook, _Notebook],
+                If[!MatchQ[notebook, _nb`NotebookObj],
                     EventFire[Messanger, "Warning", "Notebook not found"];
                     Return[];
                 ]; 
@@ -71,7 +75,7 @@ With[{
                         k["DebuggerSymbol"] = state;
                     ];
 
-                    WebUILocation[StringJoin["/debugger/", URLEncode[ BinarySerialize[state] // BaseEncode ]  ], cli, "Target"->_];
+                    WebUILocation[StringJoin["/debugger/", URLEncode[ BinarySerialize[state] // BaseEncode ]  ], cli, "Target"->_, "Features"->"width=600,height=500,left=200"];
                 ];
             ]
         ] 

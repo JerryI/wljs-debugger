@@ -1,40 +1,44 @@
-BeginPackage["JerryI`Notebook`Debugger`Utils`", {
+BeginPackage["CoffeeLiqueur`Extensions`Debugger`Utils`", {
     "JerryI`Misc`Events`",
-    "JerryI`Misc`Events`Promise`", 
-    "JerryI`Notebook`", 
-    "JerryI`Notebook`Kernel`"
+    "JerryI`Misc`Events`Promise`"
 }]
+
+Needs["CoffeeLiqueur`Notebook`Cells`" -> "cell`"];
+Needs["CoffeeLiqueur`Notebook`" -> "nb`"];
+
 
 Begin["`Internal`"]
 
+Needs["CoffeeLiqueur`Notebook`Kernel`" -> "GenericKernel`"];
+
 
 addBreak[kernel_, {"Assert", ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
-    Kernel`Async[kernel, ToExpression["On[Assert];"] ];
-    Kernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg, InputForm]]; Pause[4]; ]&;"] ] ];
+    GenericKernel`Async[kernel, ToExpression["On[Assert];"] ];
+    GenericKernel`Async[kernel, ToExpression[StringJoin["$AssertFunction = With[{msg = {##}}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"Assert\", ToString[msg, InputForm]]; Pause[4]; ]&;"] ] ];
     echo["Assertions hook was enabled"];
 ];
 
 updateSymbols[kernel_, list_] := With[{},
     With[{query = StringRiffle[(StringTemplate["If[!SymbolQ[``], ``=``];"][#,#,#]) &/@ list, " "]},
-        Kernel`Async[kernel, ToExpression[query] ];
+        GenericKernel`Async[kernel, ToExpression[query] ];
     ];
 ]
 
 removeBreak[kernel_, {"Assert", _} opts: OptionsPattern[] ] := removeBreak[kernel, "Assert", opts];
 removeBreak[kernel_, "Assert", OptionsPattern[] ] := With[{echo = OptionValue["Logger"]},
-    Kernel`Async[kernel, ToExpression["Off[Assert];"] ];
-    Kernel`Async[kernel, ToExpression["$AssertFunction = Automatic;"] ];
+    GenericKernel`Async[kernel, ToExpression["Off[Assert];"] ];
+    GenericKernel`Async[kernel, ToExpression["$AssertFunction = Automatic;"] ];
     echo["Assertions hook was disabled"];
 ]
 
 addBreak[kernel_, {"Symbol", name_String, ev_String}, OptionsPattern[] ] := With[{echo = OptionValue["Logger"], pause = OptionValue["Pause"]},
-    Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Shallow, StandardForm] ]; Pause[", ToString[pause, InputForm], "]; ];"] ] ];
+    GenericKernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[", name, "] = Function[{y,x}, EventFire[Internal`Kernel`Stdout[\"", ev, "\"], \"", name, "\", ToString[x//Shallow, StandardForm] ]; Pause[", ToString[pause, InputForm], "]; ];"] ] ];
     echo[StringTemplate["A hook for symbol `` was added"][name] ];
 ];
 
 removeBreak[kernel_, {"Symbol", name_String, ev_String}, opts: OptionsPattern[]] := removeBreak[kernel, {"Symbol", name}, opts];
 removeBreak[kernel_, {"Symbol", name_String}, OptionsPattern[] ] := With[{},
-    Kernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[\"", name, "\"] // Unset;"] ] ];
+    GenericKernel`Async[kernel, ToExpression[StringJoin["Experimental`ValueFunction[\"", name, "\"] // Unset;"] ] ];
     echo[StringTemplate["A hook for symbol `` was removed"][name] ];
 ]
 
@@ -210,4 +214,4 @@ Options[removeBreak] = {"Logger"->Echo}
 End[];
 EndPackage[];
 
-{JerryI`Notebook`Debugger`Utils`Internal`addListeners, JerryI`Notebook`Debugger`Utils`Internal`resetKernel, JerryI`Notebook`Debugger`Utils`Internal`transition, JerryI`Notebook`Debugger`Utils`Internal`addBreak, JerryI`Notebook`Debugger`Utils`Internal`removeBreak,  JerryI`Notebook`Debugger`Utils`Internal`updateSymbols}
+{CoffeeLiqueur`Extensions`Debugger`Utils`Internal`addListeners, CoffeeLiqueur`Extensions`Debugger`Utils`Internal`resetKernel, CoffeeLiqueur`Extensions`Debugger`Utils`Internal`transition, CoffeeLiqueur`Extensions`Debugger`Utils`Internal`addBreak, CoffeeLiqueur`Extensions`Debugger`Utils`Internal`removeBreak,  CoffeeLiqueur`Extensions`Debugger`Utils`Internal`updateSymbols}
