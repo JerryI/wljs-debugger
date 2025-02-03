@@ -20,6 +20,8 @@ Needs["CoffeeLiqueur`Notebook`" -> "nb`"];
 Needs["CoffeeLiqueur`Notebook`Kernel`" -> "GenericKernel`"];
 Needs["CoffeeLiqueur`Notebook`AppExtensions`" -> "AppExtensions`"];
 
+Needs["CoffeeLiqueur`ExtensionManager`" -> "WLJSPackages`"];
+
 
 root = $InputFileName // DirectoryName // ParentDirectory;
 
